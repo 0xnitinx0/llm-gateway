@@ -1,6 +1,8 @@
 # LLM Gateway
 
-A unified API Gateway for LLM providers.
+An Intelligent API Gateway for LLM Providers.
+
+The gateway acts as a unified abstraction over LLM providers. Developers use one Gateway API Key and submit standard prompt message objects without managing provider API keys or model names directly.
 
 ## Project Structure
 
@@ -13,10 +15,12 @@ llm-gateway
 │
 ├── providers
 │   ├── __init__.py
-│   └── base.py
+│   ├── base.py
+│   └── gemini_provider.py
 │
 ├── tests
-│   └── __init__.py
+│   ├── __init__.py
+│   └── test_gateway.py
 │
 ├── .env
 ├── .gitignore
@@ -30,14 +34,13 @@ llm-gateway
 ### Prerequisites
 
 - Python 3.9+
-- Virtual Environment (recommended)
+- Virtual Environment
 
-### Installation
+### Installation & Setup
 
-1. Create and activate a virtual environment:
+1. Activate virtual environment:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On macOS/Linux
+   source venv/bin/activate
    ```
 
 2. Install dependencies:
@@ -46,13 +49,68 @@ llm-gateway
    ```
 
 3. Configure environment variables in `.env`:
-   ```bash
-   cp .env.example .env  # or edit .env directly
+   ```env
+   PORT=8000
+   HOST=0.0.0.0
+   LOG_LEVEL=info
+
+   GATEWAY_API_KEY=gateway-secret-key
+   GEMINI_API_KEY=your_gemini_api_key_here
    ```
 
-4. Run the development server:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+### Running the Server
 
-5. Access the API documentation at `http://localhost:8000/docs`.
+Start the FastAPI application with `uvicorn`:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Interactive API documentation (Swagger UI) is available at:
+- `http://localhost:8000/docs`
+
+### Running Tests
+
+Run the test suite with `pytest`:
+
+```bash
+pytest
+```
+
+## API Usage
+
+### Health Check
+
+```bash
+curl -X GET http://localhost:8000/health
+```
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```
+
+### Chat Completions
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Gateway-API-Key: gateway-secret-key" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is machine learning?"
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "response": "Machine learning is a field of computer science..."
+}
+```
