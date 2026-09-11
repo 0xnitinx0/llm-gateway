@@ -7,8 +7,8 @@ The gateway acts as a unified abstraction over LLM providers. Developers use one
 ## Features
 
 - **Provider Abstraction**: Automatically routes requests to Gemini (free tier) internally.
-- **Semantic Caching (Phase 2)**: In-memory cosine similarity caching of prompt embeddings eliminates duplicate LLM API generation calls.
-- **Development Debug Endpoint**: Inspect in-memory cache contents via `GET /debug/cache`.
+- **Prompt-Minimizing Semantic Caching**: In-memory cosine similarity caching of embeddings eliminates duplicate LLM API generation calls without persisting raw user prompts.
+- **Development Debug Endpoint**: Inspect in-memory cache contents via `GET /debug/cache` (excludes raw prompts and API keys).
 - **API Key Security**: Validates incoming `X-Gateway-API-Key` headers and hides provider API keys.
 
 ## Project Structure
@@ -161,15 +161,16 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 curl -X GET http://localhost:8000/debug/cache
 ```
 
-**Response:**
+**Response (Raw prompts are never stored or exposed):**
 ```json
 {
   "total_entries": 1,
   "entries": [
     {
-      "prompt": "What is machine learning?",
+      "entry_id": "cache_a1b2c3d4",
       "response_preview": "Machine learning is a branch of artificial intelligence...",
-      "embedding_dim": 3072
+      "embedding_dim": 3072,
+      "created_at": "2026-09-11T21:10:00+00:00"
     }
   ]
 }

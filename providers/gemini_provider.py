@@ -1,5 +1,5 @@
 import os
-from typing import Any, List
+from typing import Any, List, Optional, Tuple
 
 from google import genai
 from google.genai.errors import APIError
@@ -23,7 +23,7 @@ class GeminiProvider(LLMProvider):
             raise ValueError("GEMINI_API_KEY is not configured in environment")
         return genai.Client(api_key=api_key)
 
-    async def generate(self, messages: List[Any]) -> str:
+    async def generate(self, messages: List[Any]) -> Tuple[str, Optional[dict]]:
         client = self.get_client()
 
         formatted_messages = []
@@ -43,7 +43,15 @@ class GeminiProvider(LLMProvider):
                 model=self.model_name,
                 contents=prompt,
             )
-            return response.text or ""
+            token_usage = None
+            if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
+                um = response.usage_metadata
+                token_usage = {
+                    "input_tokens": getattr(um, "prompt_token_count", None),
+                    "output_tokens": getattr(um, "candidates_token_count", None),
+                    "total_tokens": getattr(um, "total_token_count", None),
+                }
+            return (response.text or "", token_usage)
         except APIError as err:
             raise RuntimeError(f"Gemini API error: {err.message or 'Provider request failed'}") from err
         except Exception as exc:

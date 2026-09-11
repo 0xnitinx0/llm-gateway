@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, List, Optional, Tuple
 
 
 class LLMProvider(ABC):
     """Abstract base class for LLM provider implementations."""
 
     @abstractmethod
-    async def generate(self, messages: List[Any]) -> str:
-        """Generate a text response from the given chat messages."""
+    async def generate(self, messages: List[Any]) -> Tuple[str, Optional[dict]]:
+        """Generate a text response and token usage metrics from chat messages."""
         pass
 
     @abstractmethod

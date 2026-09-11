@@ -60,9 +60,10 @@ def test_semantic_cache_flow(mock_embed, mock_generate):
     v3 = [0.0, 1.0]   # Prompt 3 (unrelated)
 
     mock_generate.side_effect = [
-        "ML response from Gemini",
-        "France response from Gemini",
+        ("ML response from Gemini", {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}),
+        ("France response from Gemini", {"input_tokens": 15, "output_tokens": 25, "total_tokens": 40}),
     ]
+
 
     headers = {"X-Gateway-API-Key": VALID_GATEWAY_KEY}
 
@@ -116,8 +117,8 @@ def test_debug_cache_endpoint():
     assert res_empty.status_code == 200
     assert res_empty.json() == {"total_entries": 0, "entries": []}
 
-    # Add entry to cache
-    semantic_cache.add("What is AI?", [0.1, 0.2, 0.3], "Artificial intelligence explanation...")
+    # Add entry to cache (without prompt for privacy)
+    semantic_cache.add([0.1, 0.2, 0.3], "Artificial intelligence explanation...")
 
     res = client.get("/debug/cache")
     assert res.status_code == 200
@@ -125,8 +126,11 @@ def test_debug_cache_endpoint():
     assert data["total_entries"] == 1
     assert len(data["entries"]) == 1
     entry = data["entries"][0]
-    assert entry["prompt"] == "What is AI?"
+    assert "entry_id" in entry
+    assert "prompt" not in entry  # Ensure raw prompt is NEVER exposed
     assert entry["response_preview"] == "Artificial intelligence explanation..."
     assert entry["embedding_dim"] == 3
+    assert "created_at" in entry
     assert "embedding" not in entry  # Ensure full vector is not returned
+
 

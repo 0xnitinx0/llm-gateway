@@ -1,29 +1,35 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import math
 import os
 from typing import List, Optional, Tuple
+import uuid
 
 
 @dataclass
 class CacheEntry:
-    prompt: str
+    entry_id: str
     embedding: List[float]
     response: str
+    created_at: str
 
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     if not v1 or not v2 or len(v1) != len(v2):
         return 0.0
+
     dot = sum(a * b for a, b in zip(v1, v2))
     norm1 = math.sqrt(sum(a * a for a in v1))
     norm2 = math.sqrt(sum(b * b for b in v2))
+
     if norm1 == 0 or norm2 == 0:
         return 0.0
+
     return dot / (norm1 * norm2)
 
 
 class SemanticCache:
-    """In-memory semantic cache using embedding vector cosine similarity."""
+    """Prompt-content-minimizing in-memory semantic cache using embedding vector cosine similarity."""
 
     def __init__(self, threshold: Optional[float] = None):
         self._threshold = threshold
@@ -33,7 +39,9 @@ class SemanticCache:
     def threshold(self) -> float:
         if self._threshold is not None:
             return self._threshold
+
         env_val = os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.75")
+
         try:
             return float(env_val)
         except ValueError:
@@ -53,6 +61,7 @@ class SemanticCache:
 
         for entry in self.entries:
             score = cosine_similarity(embedding, entry.embedding)
+
             if score > best_score:
                 best_score = score
                 best_entry = entry
@@ -64,22 +73,44 @@ class SemanticCache:
 
         return None, False, best_score_rounded
 
-    def add(self, prompt: str, embedding: List[float], response: str) -> None:
-        """Store a new entry in the semantic cache."""
-        self.entries.append(CacheEntry(prompt=prompt, embedding=embedding, response=response))
+    def add(self, embedding: List[float], response: str) -> CacheEntry:
+        """Store a new entry in the semantic cache (never stores raw prompts)."""
+        entry_id = f"cache_{uuid.uuid4().hex[:8]}"
+        created_at = datetime.now(timezone.utc).isoformat()
+
+        entry = CacheEntry(
+            entry_id=entry_id,
+            embedding=embedding,
+            response=response,
+            created_at=created_at,
+        )
+
+        self.entries.append(entry)
+
+        return entry
 
     def clear(self) -> None:
         """Clear all stored cache entries."""
         self.entries.clear()
 
-    def get_entries_summary(self) -> List[dict]:
-        """Return high-level summary of cache entries for debug inspection."""
-        return [
+    def get_entries_summary(self) -> dict:
+        """Return summary of cache entries without exposing raw prompts or full vectors."""
+
+        summaries = [
             {
-                "prompt": entry.prompt,
-                "response_preview": entry.response[:100] + "..." if len(entry.response) > 100 else entry.response,
+                "entry_id": entry.entry_id,
+                "response_preview": (
+                    entry.response[:100] + "..."
+                    if len(entry.response) > 100
+                    else entry.response
+                ),
                 "embedding_dim": len(entry.embedding),
+                "created_at": entry.created_at,
             }
             for entry in self.entries
         ]
 
+        return {
+            "total_entries": len(summaries),
+            "entries": summaries,
+        }
