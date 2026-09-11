@@ -9,24 +9,23 @@ from providers.base import LLMProvider
 
 class GeminiProvider(LLMProvider):
 
-    def __init__(self, model_name: str = "gemini-3.5-flash"):
+    def __init__(
+        self,
+        model_name: str = "gemini-3.5-flash",
+        embedding_model_name: str = "gemini-embedding-001",
+    ):
         self.model_name = model_name
-        self._client = None
+        self.embedding_model_name = embedding_model_name
 
-    @property
-    def client(self) -> genai.Client:
+    def get_client(self) -> genai.Client:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is not configured in environment")
-        if self._client is None:
-            self._client = genai.Client(api_key=api_key)
-        return self._client
+        return genai.Client(api_key=api_key)
 
     async def generate(self, messages: List[Any]) -> str:
-        # Validate environment configuration
-        client = self.client
+        client = self.get_client()
 
-        # Format messages into string prompt for Gemini
         formatted_messages = []
         for msg in messages:
             if isinstance(msg, dict):
@@ -48,4 +47,20 @@ class GeminiProvider(LLMProvider):
         except APIError as err:
             raise RuntimeError(f"Gemini API error: {err.message or 'Provider request failed'}") from err
         except Exception as exc:
-            raise RuntimeError("Failed to generate response from Gemini provider") from exc
+            raise RuntimeError(f"Failed to generate response from Gemini provider: {exc}") from exc
+
+    async def embed(self, text: str) -> List[float]:
+        client = self.get_client()
+
+        try:
+            response = await client.aio.models.embed_content(
+                model=self.embedding_model_name,
+                contents=text,
+            )
+            if hasattr(response, "embeddings") and response.embeddings:
+                return response.embeddings[0].values
+            raise RuntimeError("No embedding vector returned by provider")
+        except APIError as err:
+            raise RuntimeError(f"Gemini embedding API error: {err.message or 'Embedding request failed'}") from err
+        except Exception as exc:
+            raise RuntimeError(f"Failed to generate embeddings from Gemini provider: {exc}") from exc

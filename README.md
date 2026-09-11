@@ -1,8 +1,15 @@
 # LLM Gateway
 
-An Intelligent API Gateway for LLM Providers.
+An Intelligent API Gateway for LLM Providers with Semantic Caching.
 
 The gateway acts as a unified abstraction over LLM providers. Developers use one Gateway API Key and submit standard prompt message objects without managing provider API keys or model names directly.
+
+## Features
+
+- **Provider Abstraction**: Automatically routes requests to Gemini (free tier) internally.
+- **Semantic Caching (Phase 2)**: In-memory cosine similarity caching of prompt embeddings eliminates duplicate LLM API generation calls.
+- **Development Debug Endpoint**: Inspect in-memory cache contents via `GET /debug/cache`.
+- **API Key Security**: Validates incoming `X-Gateway-API-Key` headers and hides provider API keys.
 
 ## Project Structure
 
@@ -13,6 +20,10 @@ llm-gateway
 │   ├── __init__.py
 │   └── main.py
 │
+├── cache
+│   ├── __init__.py
+│   └── semantic_cache.py
+│
 ├── providers
 │   ├── __init__.py
 │   ├── base.py
@@ -20,7 +31,8 @@ llm-gateway
 │
 ├── tests
 │   ├── __init__.py
-│   └── test_gateway.py
+│   ├── test_gateway.py
+│   └── test_semantic_cache.py
 │
 ├── .env
 ├── .gitignore
@@ -55,6 +67,8 @@ llm-gateway
    LOG_LEVEL=info
 
    GATEWAY_API_KEY=gateway-secret-key
+   CACHE_SIMILARITY_THRESHOLD=0.75
+
    GEMINI_API_KEY=your_gemini_api_key_here
    ```
 
@@ -108,9 +122,55 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 ```
 
+**Response (Cache Miss):**
+```json
+{
+  "response": "Machine learning is a branch of artificial intelligence...",
+  "cache_hit": false,
+  "similarity": 0.0
+}
+```
+
+**Response for Similar Request (Cache Hit):**
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Gateway-API-Key: gateway-secret-key" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "Can you explain what machine learning is?"
+      }
+    ]
+  }'
+```
+
+**Response (Cache Hit):**
+```json
+{
+  "response": "Machine learning is a branch of artificial intelligence...",
+  "cache_hit": true,
+  "similarity": 0.7831
+}
+```
+
+### Debug: Inspect Semantic Cache
+
+```bash
+curl -X GET http://localhost:8000/debug/cache
+```
+
 **Response:**
 ```json
 {
-  "response": "Machine learning is a field of computer science..."
+  "total_entries": 1,
+  "entries": [
+    {
+      "prompt": "What is machine learning?",
+      "response_preview": "Machine learning is a branch of artificial intelligence...",
+      "embedding_dim": 3072
+    }
+  ]
 }
 ```
