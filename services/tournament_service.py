@@ -1,191 +1,166 @@
 import asyncio
-import logging
+import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
-from providers.base import LLMProvider
-from providers.gemini_provider import GeminiProvider
-from providers.groq_provider import GroqProvider
-from providers.cerebras_provider import CerebrasProvider
+from providers.base import LLMProvider, ProviderResult, ProviderUsage
 
-logger = logging.getLogger("llm_gateway.tournament")
+
+@dataclass(slots=True)
+class CandidateOutcome:
+    candidate_id: str
+    provider: str
+    model: str
+    result: ProviderResult | None
+    latency_ms: float
+    error: str | None = None
+
+
+@dataclass(slots=True)
+class TournamentOutcome:
+    winner_id: str
+    winning_response: str
+    candidates: list[CandidateOutcome]
+    judge_provider: str
+    judge_model: str
+    scores: dict[str, float]
+    reasoning: str
+    fallback_used: bool
+    usage: ProviderUsage
 
 
 class TournamentService:
-    """Multi-Model Response Tournament Service.
+    """Parallel ensemble plus a separate judge call.
 
-    Generates responses from multiple candidate LLM providers concurrently,
-    records any individual provider failures, and uses an LLM judge to evaluate
-    and select the best candidate.
+    Independent candidates reduce single-model bias; preserving the trace makes
+    the selection auditable instead of treating the judge as an oracle.
     """
 
     def __init__(
         self,
-        providers: Optional[Dict[str, LLMProvider]] = None,
-        judge_model: str = "models/gemini-3.5-flash-lite",
+        providers: dict[str, LLMProvider],
+        candidate_names: list[str],
+        judge_name: str,
     ):
-        if providers:
-            self.providers = providers
-        else:
-            self.providers = {
-                "gemini": GeminiProvider(),
-                "groq": GroqProvider(),
-                "cerebras": CerebrasProvider(),
-            }
-        self.judge_model = judge_model
+        self.providers = providers
+        self.candidate_names = candidate_names
+        self.judge_name = judge_name
 
-    def get_available_providers(self) -> Dict[str, LLMProvider]:
-        available = {}
-        for name, p in self.providers.items():
-            try:
-                if p.is_available():
-                    available[name] = p
-            except Exception:
-                pass
-        return available
-
-    async def _call_provider(
-        self, name: str, provider: LLMProvider, messages: List[Any]
-    ) -> Dict[str, Any]:
-        text, usage = await provider.generate(messages)
-        model_name = getattr(provider, "model_name", name)
-        return {
-            "provider": name,
-            "model": model_name,
-            "text": text,
-            "usage": usage,
-        }
-
-    async def run_tournament(
-        self, messages: List[Any]
-    ) -> Tuple[str, str, str, List[Dict[str, Any]], float, Dict[str, int]]:
-        """Run tournament across all available candidate providers concurrently and judge the winner.
-
-        Returns:
-            (winning_text, winning_provider, winning_model, candidates_list, judge_score, token_summary)
-        """
-        available_map = self.get_available_providers()
-        if not available_map:
-            raise RuntimeError("No LLM providers are available for tournament mode")
-
-        # 1. Execute all available candidate providers concurrently in parallel
-        tasks = [
-            self._call_provider(name, provider, messages)
-            for name, provider in available_map.items()
-        ]
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        candidates: List[Dict[str, Any]] = []
-        total_input_tokens = 0
-        total_output_tokens = 0
-        total_tokens = 0
-
-        for res in results:
-            if isinstance(res, Exception):
-                logger.warning(f"Tournament candidate failed: {res}")
-                continue
-
-            if res and isinstance(res, dict) and res.get("text"):
-                usage = res.get("usage")
-                if usage:
-                    total_input_tokens += usage.get("input_tokens") or 0
-                    total_output_tokens += usage.get("output_tokens") or 0
-                    total_tokens += usage.get("total_tokens") or 0
-                candidates.append(res)
-
-        if not candidates:
-            raise RuntimeError("All tournament candidate models failed to generate responses")
-
-        # Single successful candidate -> automatic winner
-        if len(candidates) == 1:
-            winner = candidates[0]
-            token_summary = {
-                "input_tokens": total_input_tokens,
-                "output_tokens": total_output_tokens,
-                "total_tokens": total_tokens,
-            }
-            return (
-                winner["text"],
-                winner["provider"],
-                winner["model"],
-                candidates,
-                1.0,
-                token_summary,
-            )
-
-        # 2. Evaluate candidates using LLM Judge (Gemini)
-        user_prompt = ""
-        for msg in reversed(messages):
-            if isinstance(msg, dict) and msg.get("role") == "user":
-                user_prompt = msg.get("content", "")
-                break
-            elif getattr(msg, "role", "") == "user":
-                user_prompt = getattr(msg, "content", "")
-                break
-
-        judge_prompt = (
-            "You are an expert AI judge evaluating candidate responses for quality, accuracy, and clarity.\n\n"
-            f"User Prompt:\n{user_prompt}\n\n"
-        )
-
-        for idx, cand in enumerate(candidates):
-            judge_prompt += (
-                f"--- Candidate {idx + 1} (Provider: {cand['provider']}, Model: {cand['model']}) ---\n"
-                f"{cand['text']}\n\n"
-            )
-
-        judge_prompt += (
-            "Evaluate which candidate response is superior. Reply in EXACTLY this format:\n"
-            "WINNER: <Candidate Number, e.g. 1 or 2>\n"
-            "SCORE: <Float between 0.0 and 1.0>\n"
-            "REASON: <One sentence explanation>"
-        )
-
+    async def _candidate(
+        self,
+        candidate_id: str,
+        provider: LLMProvider,
+        messages: list[dict[str, str]],
+        temperature: float,
+        max_tokens: int | None,
+    ) -> CandidateOutcome:
+        started = time.perf_counter()
         try:
-            judge_provider = GeminiProvider(model_name=self.judge_model)
-            judge_messages = [{"role": "user", "content": judge_prompt}]
-            judge_response_text, judge_usage = await judge_provider.generate(judge_messages)
-
-            if judge_usage:
-                total_input_tokens += judge_usage.get("input_tokens") or 0
-                total_output_tokens += judge_usage.get("output_tokens") or 0
-                total_tokens += judge_usage.get("total_tokens") or 0
-
-            winner_idx = 0
-            score = 0.90
-
-            for line in judge_response_text.splitlines():
-                if line.startswith("WINNER:"):
-                    try:
-                        num_str = line.split("WINNER:")[1].strip()
-                        parsed_idx = int("".join(filter(str.isdigit, num_str))) - 1
-                        if 0 <= parsed_idx < len(candidates):
-                            winner_idx = parsed_idx
-                    except ValueError:
-                        pass
-                elif line.startswith("SCORE:"):
-                    try:
-                        score = float(line.split("SCORE:")[1].strip())
-                    except ValueError:
-                        pass
+            result = await provider.generate(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return CandidateOutcome(
+                candidate_id, result.provider, result.model, result, (time.perf_counter() - started) * 1000
+            )
         except Exception as exc:
-            logger.warning(f"Tournament LLM judge evaluation failed: {exc}. Defaulting to first candidate.")
-            winner_idx = 0
-            score = 0.85
+            return CandidateOutcome(
+                candidate_id,
+                provider.name,
+                provider.model_name,
+                None,
+                (time.perf_counter() - started) * 1000,
+                str(exc)[:300],
+            )
 
-        winner = candidates[winner_idx]
-        token_summary = {
-            "input_tokens": total_input_tokens,
-            "output_tokens": total_output_tokens,
-            "total_tokens": total_tokens,
-        }
+    def _judge_prompt(self, prompt: str, candidates: list[CandidateOutcome]) -> str:
+        blocks = [
+            "Judge the candidate responses for correctness, relevance, clarity, and completeness.",
+            f"ORIGINAL_PROMPT:\n{prompt}",
+            "Return JSON with winner_id, scores (0 to 1), and reasoning.",
+        ]
+        for candidate in candidates:
+            if candidate.result:
+                blocks.append(
+                    f"CANDIDATE_ID: {candidate.candidate_id}\nRESPONSE: {candidate.result.text}"
+                )
+        return "\n".join(blocks)
 
-        return (
-            winner["text"],
-            winner["provider"],
-            winner["model"],
-            candidates,
-            score,
-            token_summary,
+    async def run(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int | None,
+    ) -> TournamentOutcome:
+        configured = [
+            (name, self.providers[name])
+            for name in self.candidate_names
+            if name in self.providers and self.providers[name].is_available()
+        ][:3]
+        if len(configured) < 2:
+            raise RuntimeError("Tournament mode requires at least two available candidates")
+
+        outcomes = await asyncio.gather(
+            *[
+                self._candidate(f"candidate-{index + 1}", provider, messages, temperature, max_tokens)
+                for index, (_, provider) in enumerate(configured)
+            ]
+        )
+        successful = [item for item in outcomes if item.result]
+        if not successful:
+            raise RuntimeError("All tournament candidates failed")
+
+        prompt = next(
+            (message["content"] for message in reversed(messages) if message["role"] == "user"),
+            messages[-1]["content"],
+        )
+        judge = self.providers[self.judge_name]
+        judge_message = [{"role": "user", "content": self._judge_prompt(prompt, outcomes)}]
+        fallback = False
+        judge_result = None
+        parsed = None
+        for _ in range(2):
+            try:
+                judge_result = await judge.generate(judge_message, temperature=0.0)
+                parsed = json.loads(judge_result.text)
+                valid_ids = {item.candidate_id for item in successful}
+                if parsed.get("winner_id") not in valid_ids:
+                    raise ValueError("judge selected an unknown candidate")
+                break
+            except Exception:
+                parsed = None
+                judge_message.append(
+                    {"role": "system", "content": "Your previous output was invalid. Return only valid JSON."}
+                )
+
+        if parsed is None:
+            fallback = True
+            winner = max(successful, key=lambda item: len(item.result.text if item.result else ""))
+            parsed = {
+                "winner_id": winner.candidate_id,
+                "scores": {
+                    item.candidate_id: round(len(item.result.text if item.result else "") / 1000, 3)
+                    for item in successful
+                },
+                "reasoning": "Deterministic fallback selected the most complete successful response.",
+            }
+        winner = next(item for item in successful if item.candidate_id == parsed["winner_id"])
+        prompt_total = sum(item.result.usage.prompt_tokens for item in successful if item.result)
+        completion_total = sum(item.result.usage.completion_tokens for item in successful if item.result)
+        if judge_result:
+            prompt_total += judge_result.usage.prompt_tokens
+            completion_total += judge_result.usage.completion_tokens
+
+        return TournamentOutcome(
+            winner_id=winner.candidate_id,
+            winning_response=winner.result.text,
+            candidates=outcomes,
+            judge_provider=judge.name,
+            judge_model=judge.model_name,
+            scores={key: float(value) for key, value in parsed.get("scores", {}).items()},
+            reasoning=str(parsed.get("reasoning", "")),
+            fallback_used=fallback,
+            usage=ProviderUsage(prompt_total, completion_total),
         )

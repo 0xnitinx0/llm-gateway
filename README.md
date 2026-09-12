@@ -1,177 +1,61 @@
 # LLM Gateway
 
-An Intelligent API Gateway for LLM Providers with Semantic Caching.
+A local-first, backend-only LLM gateway written in Python. One FastAPI process
+contains an edge layer (authentication, Redis rate limiting, HTTP/SSE) and an
+intelligence layer (routing, pgvector deduplication, prompt compression, and
+multi-model judging). The modular-monolith boundary keeps a solo demo easy to
+trace while leaving each service replaceable.
 
-The gateway acts as a unified abstraction over LLM providers. Developers use one Gateway API Key and submit standard prompt message objects without managing provider API keys or model names directly.
+## Local stack
 
-## Features
+- FastAPI and async SQLAlchemy
+- PostgreSQL 16 with pgvector and an HNSW cosine index
+- Redis token-bucket rate limiting implemented atomically in Lua
+- ONNX FastEmbed BGE-small embeddings, baked into the image
+- Deterministic local generation and judge profiles; Gemini, Groq, and Cerebras
+  are optional
 
-- **Provider Abstraction**: Automatically routes requests to Gemini (free tier) internally.
-- **Prompt-Minimizing Semantic Caching**: In-memory cosine similarity caching of embeddings eliminates duplicate LLM API generation calls without persisting raw user prompts.
-- **Development Debug Endpoint**: Inspect in-memory cache contents via `GET /debug/cache` (excludes raw prompts and API keys).
-- **API Key Security**: Validates incoming `X-Gateway-API-Key` headers and hides provider API keys.
+Start everything:
 
-## Project Structure
+    docker compose up --build
 
-```
-llm-gateway
-│
-├── app
-│   ├── __init__.py
-│   └── main.py
-│
-├── cache
-│   ├── __init__.py
-│   └── semantic_cache.py
-│
-├── providers
-│   ├── __init__.py
-│   ├── base.py
-│   └── gemini_provider.py
-│
-├── tests
-│   ├── __init__.py
-│   ├── test_gateway.py
-│   └── test_semantic_cache.py
-│
-├── .env
-├── .gitignore
-├── requirements.txt
-├── docker-compose.yml
-└── README.md
-```
+The initial image build downloads the embedding model. Runtime requests require
+no cloud API or paid credentials. Readiness is available at
+http://localhost:8000/ready and interactive API documentation at
+http://localhost:8000/docs.
 
-## Getting Started
+Run the complete narrated demo from another terminal:
 
-### Prerequisites
+    python3 -m scripts.demo all
 
-- Python 3.9+
-- Virtual Environment
+Individual stages are also available:
 
-### Installation & Setup
+    python3 -m scripts.demo edge
+    python3 -m scripts.demo rate-limit
+    python3 -m scripts.demo cache
+    python3 -m scripts.demo compression
+    python3 -m scripts.demo tournament
 
-1. Activate virtual environment:
-   ```bash
-   source venv/bin/activate
-   ```
+The seeded keys are gw_demo_local and gw_demo_rate. Admin-only endpoints use
+X-Admin-Key: admin-local-demo. Override these values for anything beyond a local
+demo.
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Client API
 
-3. Configure environment variables in `.env`:
-   ```env
-   PORT=8000
-   HOST=0.0.0.0
-   LOG_LEVEL=info
+POST /v1/chat/completions accepts the standard model, messages, temperature,
+max_tokens, stream, and stream_options fields. Authenticate using either
+Authorization: Bearer GATEWAY_KEY or X-Gateway-API-Key. Non-streaming responses
+retain the standard choices and usage objects and add a gateway metadata object.
+Streaming responses use SSE chat-completion chunks and terminate with [DONE].
 
-   GATEWAY_API_KEY=gateway-secret-key
-   CACHE_SIMILARITY_THRESHOLD=0.75
+POST /v1/tools/compress exposes compression independently. POST /v1/tournaments
+returns candidates, errors, timing, token usage, judge scores/reasoning, and the
+winner. Cache, key-management, reset, and usage endpoints require the admin key.
 
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
+## Development
 
-### Running the Server
+    python3 -m pip install -r requirements.txt
+    pytest -q
 
-Start the FastAPI application with `uvicorn`:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Interactive API documentation (Swagger UI) is available at:
-- `http://localhost:8000/docs`
-
-### Running Tests
-
-Run the test suite with `pytest`:
-
-```bash
-pytest
-```
-
-## API Usage
-
-### Health Check
-
-```bash
-curl -X GET http://localhost:8000/health
-```
-
-**Response:**
-```json
-{
-  "status": "ok"
-}
-```
-
-### Chat Completions
-
-```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Gateway-API-Key: gateway-secret-key" \
-  -d '{
-    "messages": [
-      {
-        "role": "user",
-        "content": "What is machine learning?"
-      }
-    ]
-  }'
-```
-
-**Response (Cache Miss):**
-```json
-{
-  "response": "Machine learning is a branch of artificial intelligence...",
-  "cache_hit": false,
-  "similarity": 0.0
-}
-```
-
-**Response for Similar Request (Cache Hit):**
-```bash
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Gateway-API-Key: gateway-secret-key" \
-  -d '{
-    "messages": [
-      {
-        "role": "user",
-        "content": "Can you explain what machine learning is?"
-      }
-    ]
-  }'
-```
-
-**Response (Cache Hit):**
-```json
-{
-  "response": "Machine learning is a branch of artificial intelligence...",
-  "cache_hit": true,
-  "similarity": 0.7831
-}
-```
-
-### Debug: Inspect Semantic Cache
-
-```bash
-curl -X GET http://localhost:8000/debug/cache
-```
-
-**Response (Raw prompts are never stored or exposed):**
-```json
-{
-  "total_entries": 1,
-  "entries": [
-    {
-      "entry_id": "cache_a1b2c3d4",
-      "response_preview": "Machine learning is a branch of artificial intelligence...",
-      "embedding_dim": 3072,
-      "created_at": "2026-09-11T21:10:00+00:00"
-    }
-  ]
-}
-```
+Raw prompts and API keys are never written to logs or semantic-cache rows. Only
+key hashes, embeddings, generated responses, and operational metrics persist.
