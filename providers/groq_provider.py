@@ -1,63 +1,13 @@
 import os
-from typing import Any, List, Optional, Tuple
-import httpx
 
-from providers.base import LLMProvider
+from providers.http_provider import OpenAIWireProvider
 
 
-class GroqProvider(LLMProvider):
-
-    def __init__(self, model_name: Optional[str] = None):
-        self.model_name = model_name or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
-
-    def is_available(self) -> bool:
-        return bool(os.getenv("GROQ_API_KEY", "").strip())
-
-    async def generate(self, messages: List[Any]) -> Tuple[str, Optional[dict]]:
-        api_key = os.getenv("GROQ_API_KEY", "").strip()
-        if not api_key:
-            raise ValueError("GROQ_API_KEY is not configured in environment")
-
-        formatted_messages = []
-        for msg in messages:
-            if isinstance(msg, dict):
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-            else:
-                role = getattr(msg, "role", "user")
-                content = getattr(msg, "content", "")
-            formatted_messages.append({"role": role, "content": content})
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.model_name,
-            "messages": formatted_messages,
-            "temperature": 0.7,
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(self.api_url, headers=headers, json=payload)
-                if response.status_code != 200:
-                    raise RuntimeError(f"Groq API returned status {response.status_code}: {response.text}")
-                data = response.json()
-                text = data["choices"][0]["message"]["content"]
-                usage_raw = data.get("usage", {})
-                token_usage = None
-                if usage_raw:
-                    token_usage = {
-                        "input_tokens": usage_raw.get("prompt_tokens"),
-                        "output_tokens": usage_raw.get("completion_tokens"),
-                        "total_tokens": usage_raw.get("total_tokens"),
-                    }
-                return (text or "", token_usage)
-        except Exception as exc:
-            raise RuntimeError(f"Failed to generate response from Groq provider: {exc}") from exc
-
-    async def embed(self, text: str) -> List[float]:
-        from providers.gemini_provider import GeminiProvider
-        return await GeminiProvider().embed(text)
+class GroqProvider(OpenAIWireProvider):
+    def __init__(self, model_name: str | None = None):
+        super().__init__(
+            name="groq",
+            model_name=model_name or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            api_url="https://api.groq.com/openai/v1/chat/completions",
+            api_key_env="GROQ_API_KEY",
+        )

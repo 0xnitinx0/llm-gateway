@@ -1,97 +1,86 @@
 from dataclasses import dataclass
 import re
-from typing import Any, List, Tuple
+from typing import Any, Callable
 
 
-@dataclass
+@dataclass(slots=True)
 class CompressionStats:
-    original_length: int
-    compressed_length: int
-    compression_ratio: float
-    tokens_saved: int = 0
+    strategy: str
+    original_tokens: int
+    compressed_tokens: int
+    tokens_saved: int
+    reduction_percent: float
 
 
 class PromptCompressor:
-    """Modular adaptive prompt compressor.
+    """Explainable compression that removes redundancy without rewriting intent."""
 
-    Compresses long/redundant user messages conservatively while preserving key intent and instructions.
-    Prompts below min_length_threshold remain unchanged.
-    """
+    FILLER_PATTERNS = (
+        r"\b(?:could you please|would you mind|be so kind as to|can you please|please kindly)\b",
+        r"\b(?:i was wondering if you could|if possible|to be honest with you)\b",
+    )
 
-    def __init__(self, min_length_threshold: int = 50):
-        self.min_length_threshold = min_length_threshold
+    def __init__(
+        self,
+        token_counter: Callable[[str], int] | None = None,
+        min_tokens: int = 30,
+        target_ratio: float = 0.70,
+    ):
+        self.count_tokens = token_counter or (lambda value: len(value.split()))
+        self.min_tokens = min_tokens
+        self.target_ratio = target_ratio
 
-        self.filler_patterns = [
-            r"\b(?:could you please|would you mind|be so kind as to|can you please|please kindly|i was wondering if you could|if possible)\b",
-            r"\b(?:as an ai language model|as you know|in my humble opinion|to be honest with you)\b",
+    @staticmethod
+    def _parts(message: Any) -> tuple[str, str]:
+        if isinstance(message, dict):
+            return str(message.get("role", "user")), str(message.get("content", ""))
+        return str(getattr(message, "role", "user")), str(getattr(message, "content", ""))
+
+    def _compress_text(self, text: str) -> str:
+        text = re.sub(r"\s+", " ", text).strip()
+        for pattern in self.FILLER_PATTERNS:
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        unique: list[str] = []
+        fingerprints: set[str] = set()
+        for sentence in sentences:
+            fingerprint = re.sub(r"\W+", " ", sentence.lower()).strip()
+            if fingerprint and fingerprint not in fingerprints:
+                fingerprints.add(fingerprint)
+                unique.append(sentence.strip())
+
+        protected = [
+            sentence
+            for sentence in unique
+            if re.search(r"\x60{3}|\b(?:must|never|not|exactly|json|format|\d+)\b", sentence, re.IGNORECASE)
         ]
-
-    def compress_text(self, text: str) -> str:
-        if not text or len(text) < self.min_length_threshold:
+        others = [sentence for sentence in unique if sentence not in protected]
+        target = max(1, int(len(unique) * self.target_ratio))
+        selected = unique if len(unique) <= target else protected + others[: max(0, target - len(protected))]
+        if not selected:
             return text
+        order = {sentence: index for index, sentence in enumerate(unique)}
+        return " ".join(sorted(set(selected), key=order.get)).strip() or text
 
-        compressed = text
-        compressed = re.sub(r"\n{3,}", "\n\n", compressed)
-        compressed = re.sub(r"[ \t]{2,}", " ", compressed)
+    def compress(self, messages: list[Any]) -> tuple[list[dict[str, str]], CompressionStats]:
+        normalized = [{"role": role, "content": content} for role, content in map(self._parts, messages)]
+        original_tokens = sum(self.count_tokens(item["content"]) for item in normalized)
+        compressed = []
+        for item in normalized:
+            content = item["content"]
+            if item["role"] == "user" and original_tokens >= self.min_tokens:
+                content = self._compress_text(content)
+            compressed.append({"role": item["role"], "content": content})
 
-        for pattern in self.filler_patterns:
-            compressed = re.sub(pattern, "", compressed, flags=re.IGNORECASE)
-
-        compressed = re.sub(r"[ \t]{2,}", " ", compressed).strip()
-        return compressed if compressed else text
-
-    def compress(self, messages: List[Any]) -> Tuple[List[Any], CompressionStats]:
-        original_length = sum(
-            len(msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", ""))
-            for msg in messages
+        compressed_tokens = sum(self.count_tokens(item["content"]) for item in compressed)
+        saved = max(0, original_tokens - compressed_tokens)
+        reduction = round((saved / original_tokens) * 100, 2) if original_tokens else 0.0
+        return compressed, CompressionStats(
+            strategy="filler+sentence-dedup+extractive",
+            original_tokens=original_tokens,
+            compressed_tokens=compressed_tokens,
+            tokens_saved=saved,
+            reduction_percent=reduction,
         )
-
-        if original_length < self.min_length_threshold:
-            stats = CompressionStats(
-                original_length=original_length,
-                compressed_length=original_length,
-                compression_ratio=0.0,
-            )
-            return messages, stats
-
-        compressed_messages = []
-        for msg in messages:
-            if isinstance(msg, dict):
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role == "user":
-                    content = self.compress_text(content)
-                compressed_messages.append({"role": role, "content": content})
-            else:
-                role = getattr(msg, "role", "user")
-                content = getattr(msg, "content", "")
-                if role == "user":
-                    content = self.compress_text(content)
-                # Create a copy with compressed content if Pydantic model
-                if hasattr(msg, "model_copy"):
-                    compressed_messages.append(msg.model_copy(update={"content": content}))
-                elif hasattr(msg, "copy"):
-                    compressed_messages.append(msg.copy(update={"content": content}))
-
-                else:
-                    compressed_messages.append({"role": role, "content": content})
-
-        compressed_length = sum(
-            len(msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", ""))
-            for msg in compressed_messages
-        )
-
-        ratio = (
-            round(1.0 - (compressed_length / original_length), 4)
-            if original_length > 0
-            else 0.0
-        )
-        if ratio < 0:
-            ratio = 0.0
-
-        stats = CompressionStats(
-            original_length=original_length,
-            compressed_length=compressed_length,
-            compression_ratio=ratio,
-        )
-        return compressed_messages, stats

@@ -1,90 +1,65 @@
 import hashlib
 import secrets
 from datetime import datetime, timezone
-from typing import List, Tuple
-from uuid import uuid4
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import GatewayAPIKey
 
 
 def hash_api_key(raw_key: str) -> str:
-    """Hash the raw API key using SHA-256."""
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
-def generate_raw_key() -> str:
-    """Generate a secure live gateway API key."""
-    return f"gw_live_{secrets.token_hex(16)}"
+def mask_api_key(raw_key: str) -> str:
+    return f"{raw_key[:8]}••••••••{raw_key[-4:]}"
 
 
-def create_gateway_api_key(db: Session, name: str) -> Tuple[GatewayAPIKey, str]:
-    """Create and persist a new Gateway API Key record in PostgreSQL.
-    
-    Returns the database model object and the unhashed raw key (to be shown only once).
-    """
-    raw_key = generate_raw_key()
-    key_hash = hash_api_key(raw_key)
-    masked = f"gw_live_{raw_key[8:12]}••••••••••••{raw_key[-4:]}"
-
-    key_obj = GatewayAPIKey(
-        id=str(uuid4()),
+async def create_gateway_api_key(
+    db: AsyncSession,
+    name: str,
+    rate_limit_capacity: int = 60,
+    refill_rate_per_second: float = 1.0,
+    raw_key: str | None = None,
+) -> tuple[GatewayAPIKey, str]:
+    raw_key = raw_key or f"gw_live_{secrets.token_hex(16)}"
+    key = GatewayAPIKey(
         name=name.strip(),
-        key_hash=key_hash,
-        masked_key=masked,
-        created_at=datetime.now(timezone.utc),
-        is_revoked=False,
+        key_hash=hash_api_key(raw_key),
+        masked_key=mask_api_key(raw_key),
+        rate_limit_capacity=rate_limit_capacity,
+        refill_rate_per_second=refill_rate_per_second,
     )
-    db.add(key_obj)
-    db.commit()
-    db.refresh(key_obj)
-    return key_obj, raw_key
+    db.add(key)
+    await db.commit()
+    await db.refresh(key)
+    return key, raw_key
 
 
-def get_all_api_keys(db: Session) -> List[GatewayAPIKey]:
-    """Retrieve all Gateway API key records ordered by creation date descending."""
-    return db.query(GatewayAPIKey).order_by(GatewayAPIKey.created_at.desc()).all()
+async def validate_gateway_api_key(db: AsyncSession, raw_key: str) -> GatewayAPIKey | None:
+    key = await db.scalar(select(GatewayAPIKey).where(GatewayAPIKey.key_hash == hash_api_key(raw_key)))
+    if key is None or key.is_revoked:
+        return None
+    key.last_used_at = datetime.now(timezone.utc)
+    await db.commit()
+    return key
 
 
-def revoke_gateway_api_key(db: Session, key_id: str) -> bool:
-    """Revoke a Gateway API key by ID."""
-    key_obj = db.query(GatewayAPIKey).filter(GatewayAPIKey.id == key_id).first()
-    if not key_obj:
-        return False
-    key_obj.is_revoked = True
-    db.commit()
-    return True
-
-
-def validate_gateway_api_key(db: Session, raw_key: str) -> bool:
-    """Validate a raw API key against active DB records.
-    
-    If valid, updates last_used_at timestamp.
-    Returns True if valid, False otherwise.
-    """
-    if not raw_key:
-        return False
-
-    key_hash = hash_api_key(raw_key)
-    try:
-        key_obj = (
-            db.query(GatewayAPIKey)
-            .filter(GatewayAPIKey.key_hash == key_hash)
-            .first()
-        )
-    except Exception:
-        db.rollback()
-        return False
-
-    if not key_obj or key_obj.is_revoked:
-        return False
-
-    try:
-        key_obj.last_used_at = datetime.now(timezone.utc)
-        db.commit()
-    except Exception:
-        db.rollback()
-
-    return True
-
+async def seed_gateway_api_key(
+    db: AsyncSession,
+    *,
+    raw_key: str,
+    name: str,
+    capacity: int,
+    refill_rate: float,
+) -> GatewayAPIKey:
+    existing = await db.scalar(select(GatewayAPIKey).where(GatewayAPIKey.key_hash == hash_api_key(raw_key)))
+    if existing:
+        existing.rate_limit_capacity = capacity
+        existing.refill_rate_per_second = refill_rate
+        existing.is_revoked = False
+        await db.commit()
+        return existing
+    key, _ = await create_gateway_api_key(db, name, capacity, refill_rate, raw_key)
+    return key

@@ -4,15 +4,32 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://gateway:gateway_password@postgres:5432/llm_gateway
-      - GATEWAY_API_KEY=${GATEWAY_API_KEY:-gateway-secret-key}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      DATABASE_URL: postgresql+asyncpg://gateway:gateway_password@postgres:5432/llm_gateway
+      REDIS_URL: redis://redis:6379/0
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-admin-local-demo}
+      DEMO_API_KEY: ${DEMO_API_KEY:-gw_demo_local}
+      RATE_LIMIT_DEMO_API_KEY: ${RATE_LIMIT_DEMO_API_KEY:-gw_demo_rate}
+      CACHE_SIMILARITY_THRESHOLD: ${CACHE_SIMILARITY_THRESHOLD:-0.82}
+      EMBEDDING_MODEL: BAAI/bge-small-en-v1.5
+      EMBEDDING_MODEL_PATH: /models/fastembed
+      LOCAL_TOKEN_DELAY_MS: ${LOCAL_TOKEN_DELAY_MS:-35}
+      ENABLED_PROVIDERS: local
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: llm_gateway
       POSTGRES_USER: gateway
@@ -23,9 +40,23 @@ services:
       test: ["CMD-SHELL", "pg_isready -U gateway -d llm_gateway"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - redis_data:/data
+
 volumes:
   postgres_data:
+  redis_data:

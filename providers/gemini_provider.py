@@ -1,78 +1,73 @@
 import os
-from typing import Any, List, Optional, Tuple
+import time
+from collections.abc import AsyncIterator
+from typing import Any
 
 from google import genai
-from google.genai.errors import APIError
 
-from providers.base import LLMProvider
+from providers.base import LLMProvider, ProviderResult, ProviderUsage
 
 
 class GeminiProvider(LLMProvider):
-
-    def __init__(
-        self,
-        model_name: Optional[str] = None,
-        embedding_model_name: Optional[str] = None,
-    ):
-        self.model_name = model_name or os.getenv("GEMINI_MODEL", "models/gemini-3.5-flash-lite")
-        self.embedding_model_name = embedding_model_name or os.getenv("GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001")
+    def __init__(self, model_name: str | None = None):
+        self.name = "gemini"
+        self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     def is_available(self) -> bool:
         return bool(os.getenv("GEMINI_API_KEY", "").strip())
 
-    def get_client(self) -> genai.Client:
+    def _client(self) -> genai.Client:
+        key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not key:
+            raise RuntimeError("GEMINI_API_KEY is not configured")
+        return genai.Client(api_key=key)
 
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY is not configured in environment")
-        return genai.Client(api_key=api_key)
+    def _prompt(self, messages: list[Any]) -> str:
+        lines = []
+        for message in messages:
+            role = message.get("role", "user") if isinstance(message, dict) else getattr(message, "role", "user")
+            content = message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
+            lines.append(f"{role}: {content}")
+        return "\n".join(lines)
 
-    async def generate(self, messages: List[Any]) -> Tuple[str, Optional[dict]]:
-        client = self.get_client()
+    async def generate(
+        self,
+        messages: list[Any],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ) -> ProviderResult:
+        started = time.perf_counter()
+        response = await self._client().aio.models.generate_content(
+            model=self.model_name,
+            contents=self._prompt(messages),
+            config={"temperature": temperature, "max_output_tokens": max_tokens} if max_tokens else {"temperature": temperature},
+        )
+        metadata = getattr(response, "usage_metadata", None)
+        usage = ProviderUsage(
+            getattr(metadata, "prompt_token_count", 0) or 0,
+            getattr(metadata, "candidates_token_count", 0) or 0,
+        )
+        return ProviderResult(
+            text=response.text or "",
+            usage=usage,
+            provider=self.name,
+            model=self.model_name,
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
 
-        formatted_messages = []
-        for msg in messages:
-            if isinstance(msg, dict):
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-            else:
-                role = getattr(msg, "role", "user")
-                content = getattr(msg, "content", "")
-            formatted_messages.append(f"{role}: {content}")
-
-        prompt = "\n".join(formatted_messages)
-
-        try:
-            response = await client.aio.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-            )
-            token_usage = None
-            if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
-                um = response.usage_metadata
-                token_usage = {
-                    "input_tokens": getattr(um, "prompt_token_count", None),
-                    "output_tokens": getattr(um, "candidates_token_count", None),
-                    "total_tokens": getattr(um, "total_token_count", None),
-                }
-            return (response.text or "", token_usage)
-        except APIError as err:
-            raise RuntimeError(f"Gemini API error: {err.message or 'Provider request failed'}") from err
-        except Exception as exc:
-            raise RuntimeError(f"Failed to generate response from Gemini provider: {exc}") from exc
-
-    async def embed(self, text: str) -> List[float]:
-        client = self.get_client()
-
-        try:
-            response = await client.aio.models.embed_content(
-                model=self.embedding_model_name,
-                contents=text,
-            )
-            if hasattr(response, "embeddings") and response.embeddings:
-                return response.embeddings[0].values
-            raise RuntimeError("No embedding vector returned by provider")
-        except APIError as err:
-            raise RuntimeError(f"Gemini embedding API error: {err.message or 'Embedding request failed'}") from err
-        except Exception as exc:
-            raise RuntimeError(f"Failed to generate embeddings from Gemini provider: {exc}") from exc
+    async def stream(
+        self,
+        messages: list[Any],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[str]:
+        stream = await self._client().aio.models.generate_content_stream(
+            model=self.model_name,
+            contents=self._prompt(messages),
+            config={"temperature": temperature, "max_output_tokens": max_tokens} if max_tokens else {"temperature": temperature},
+        )
+        async for chunk in stream:
+            if chunk.text:
+                yield chunk.text
