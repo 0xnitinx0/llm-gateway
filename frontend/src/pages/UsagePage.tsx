@@ -77,38 +77,38 @@ export const UsagePage: React.FC = () => {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <MetricCard
             label="Total Requests"
-            value={isLoading ? '...' : usage?.totalRequests.toLocaleString() || '1,248'}
+            value={isLoading ? '...' : usage?.totalRequests !== undefined ? usage.totalRequests.toLocaleString() : '0'}
             sublabel="Received by gateway"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
           />
           <MetricCard
             label="LLM Calls"
-            value={isLoading ? '...' : usage?.llmCalls.toLocaleString() || '812'}
+            value={isLoading ? '...' : usage?.llmCalls !== undefined ? usage.llmCalls.toLocaleString() : '0'}
             sublabel="Forwarded to provider"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
           />
           <MetricCard
             label="Cache Hits"
-            value={isLoading ? '...' : usage?.cacheHits.toLocaleString() || '436'}
+            value={isLoading ? '...' : usage?.cacheHits !== undefined ? usage.cacheHits.toLocaleString() : '0'}
             sublabel="Zero-provider calls"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
           />
           <MetricCard
-            label="Tokens Saved"
-            value={isLoading ? '...' : usage?.tokensSaved.toLocaleString() || '42,180'}
-            sublabel="Combined reduction"
-            badgeVariant="demo"
-            badgeText="Demo"
+            label="Total Tokens"
+            value={isLoading ? '...' : usage?.totalTokens !== null && usage?.totalTokens !== undefined ? usage.totalTokens.toLocaleString() : 'N/A'}
+            sublabel="Captured from provider"
+            badgeVariant="live"
+            badgeText="Live"
           />
           <MetricCard
             label="Estimated Cost Saved"
-            value={isLoading ? '...' : `$${usage?.estimatedCostSaved.toFixed(2) || '12.84'}`}
-            sublabel="Theoretical savings"
-            badgeVariant="demo"
-            badgeText="Demo"
+            value={isLoading ? '...' : (usage?.estimatedCostSaved !== undefined && usage?.estimatedCostSaved !== null ? (usage.estimatedCostSaved < 0.01 && usage.estimatedCostSaved > 0 ? `$${usage.estimatedCostSaved.toFixed(4)}` : `$${usage.estimatedCostSaved.toFixed(2)}`) : '$0.00')}
+            sublabel="Avoided provider cost"
+            badgeVariant="live"
+            badgeText="Live"
           />
         </div>
 
@@ -118,35 +118,35 @@ export const UsagePage: React.FC = () => {
           <Card
             title="Token Usage Comparison"
             subtitle="Comparing standard direct provider calls vs. Gateway-optimized traffic"
-            headerAction={<Badge variant="demo">Demo Data</Badge>}
+            headerAction={<Badge variant="live">Live Data</Badge>}
           >
             <div className="space-y-4">
               <TokenUsageComparisonChart
-                withoutGateway={usage?.withoutGatewayTokens || 60240}
-                withGateway={usage?.withGatewayTokens || 42180}
+                withoutGateway={usage?.totalTokens ? usage.totalTokens + (usage.totalInputTokens || 0) : 0}
+                withGateway={usage?.totalTokens || 0}
               />
 
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div className="p-3 bg-slate-50 rounded-md border border-slate-100">
                   <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                    Tokens Saved
+                    Total Input Tokens
                   </span>
                   <div className="text-xl font-bold text-blue-600 font-mono mt-0.5">
-                    18,060
+                    {usage?.totalInputTokens !== null && usage?.totalInputTokens !== undefined ? usage.totalInputTokens.toLocaleString() : 'N/A'}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Saved via prompt compression
+                    Captured from provider
                   </p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-md border border-slate-100">
                   <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                    Compression Ratio
+                    Total Output Tokens
                   </span>
                   <div className="text-xl font-bold text-emerald-600 font-mono mt-0.5">
-                    70%
+                    {usage?.totalOutputTokens !== null && usage?.totalOutputTokens !== undefined ? usage.totalOutputTokens.toLocaleString() : 'N/A'}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Context size retained
+                    Captured from provider
                   </p>
                 </div>
               </div>
@@ -157,14 +157,14 @@ export const UsagePage: React.FC = () => {
           <Card
             title="Estimated Cost Breakdown"
             subtitle="Calculated based on standard token pricing across unified gateway workloads"
-            headerAction={<Badge variant="demo">Demo Estimate</Badge>}
+            headerAction={<Badge variant="live">Estimated Cost</Badge>}
           >
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-4 bg-slate-50/80 rounded-lg border border-slate-200">
                   <span className="text-xs font-semibold text-slate-600">Without Gateway</span>
                   <div className="text-2xl font-bold text-slate-700 font-mono mt-2">
-                    ${usage?.costWithoutGateway.toFixed(2) || '38.40'}
+                    {usage?.estimatedCostWithoutGateway !== undefined && usage?.estimatedCostWithoutGateway !== null ? (usage.estimatedCostWithoutGateway < 0.01 && usage.estimatedCostWithoutGateway > 0 ? `$${usage.estimatedCostWithoutGateway.toFixed(4)}` : `$${usage.estimatedCostWithoutGateway.toFixed(2)}`) : '$0.00'}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
                     Uncached raw token usage
@@ -174,7 +174,7 @@ export const UsagePage: React.FC = () => {
                 <div className="p-4 bg-blue-50/60 rounded-lg border border-blue-200/80">
                   <span className="text-xs font-semibold text-blue-800">With Gateway</span>
                   <div className="text-2xl font-bold text-blue-700 font-mono mt-2">
-                    ${usage?.costWithGateway.toFixed(2) || '25.56'}
+                    {usage?.actualProviderCost !== undefined && usage?.actualProviderCost !== null ? (usage.actualProviderCost < 0.01 && usage.actualProviderCost > 0 ? `$${usage.actualProviderCost.toFixed(4)}` : `$${usage.actualProviderCost.toFixed(2)}`) : (usage?.estimatedCost !== undefined && usage?.estimatedCost !== null ? (usage.estimatedCost < 0.01 && usage.estimatedCost > 0 ? `$${usage.estimatedCost.toFixed(4)}` : `$${usage.estimatedCost.toFixed(2)}`) : '$0.00')}
                   </div>
                   <p className="text-[11px] text-blue-600 mt-1">
                     Intelligently optimized
@@ -187,10 +187,10 @@ export const UsagePage: React.FC = () => {
                     <TrendingDown className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="text-2xl font-bold text-emerald-700 font-mono mt-2">
-                    ${usage?.estimatedCostSaved.toFixed(2) || '12.84'}
+                    {usage?.estimatedCostSaved !== undefined && usage?.estimatedCostSaved !== null ? (usage.estimatedCostSaved < 0.01 && usage.estimatedCostSaved > 0 ? `$${usage.estimatedCostSaved.toFixed(4)}` : `$${usage.estimatedCostSaved.toFixed(2)}`) : '$0.00'}
                   </div>
                   <p className="text-[11px] text-emerald-600 mt-1">
-                    33.4% financial reduction
+                    Provider cost avoided
                   </p>
                 </div>
               </div>
@@ -198,11 +198,12 @@ export const UsagePage: React.FC = () => {
               <div className="p-3.5 rounded-md bg-slate-50 border border-slate-100 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  <strong>Estimated figures:</strong> These metrics simulate monthly cost projections based on provider token rates. They represent the architectural value proposition rather than live billing invoices.
+                  <strong>Estimated Cost:</strong> Based on recorded gateway token usage and standard provider token rates, not an actual provider invoice.
                 </p>
               </div>
             </div>
           </Card>
+
         </div>
 
         {/* Optimization Sources Breakdown */}

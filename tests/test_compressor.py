@@ -39,9 +39,9 @@ def test_compressor_unit_long_prompt_with_filler():
     assert stats.compression_ratio > 0.0
 
 
-@patch("app.main.provider.generate", new_callable=AsyncMock)
+@patch("app.main.model_router.execute", new_callable=AsyncMock)
 @patch("app.main.provider.embed", new_callable=AsyncMock)
-def test_compression_gateway_pipeline(mock_embed, mock_generate):
+def test_compression_gateway_pipeline(mock_embed, mock_router_execute):
     """Integration test verifying compression pipeline on Cache MISS and bypass on Cache HIT."""
     semantic_cache.clear()
 
@@ -49,9 +49,12 @@ def test_compression_gateway_pipeline(mock_embed, mock_generate):
     v2 = [0.99, 0.05]
 
     mock_embed.return_value = v1
-    mock_generate.return_value = (
+    mock_router_execute.return_value = (
         "AI Explanation",
         {"input_tokens": 12, "output_tokens": 20, "total_tokens": 32},
+        "groq",
+        "groq/compound",
+        False,
     )
 
     headers = {"X-Gateway-API-Key": VALID_GATEWAY_KEY}
@@ -65,10 +68,10 @@ def test_compression_gateway_pipeline(mock_embed, mock_generate):
     )
     assert res1.status_code == 200
     assert res1.json()["cache_hit"] is False
-    assert mock_generate.call_count == 1
+    assert mock_router_execute.call_count == 1
 
-    # Inspect call args passed to mock_generate: should be compressed messages
-    called_messages = mock_generate.call_args[0][0]
+    # Inspect call args passed to mock_router_execute: should be compressed messages
+    called_messages = mock_router_execute.call_args[0][0]
     sent_content = (
         called_messages[0]["content"]
         if isinstance(called_messages[0], dict)
@@ -86,5 +89,5 @@ def test_compression_gateway_pipeline(mock_embed, mock_generate):
     )
     assert res2.status_code == 200
     assert res2.json()["cache_hit"] is True
-    # mock_generate should NOT be called again
-    assert mock_generate.call_count == 1
+    # mock_router_execute should NOT be called again
+    assert mock_router_execute.call_count == 1

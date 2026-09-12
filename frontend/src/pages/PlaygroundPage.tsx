@@ -19,13 +19,26 @@ interface OutletContextType {
 export const PlaygroundPage: React.FC = () => {
   const { setIsMobileOpen, gatewayOnline } = useOutletContext<OutletContextType>();
 
-  const [apiKey, setApiKey] = useState('gateway-secret-key');
+  const [apiKey, setApiKey] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gateway_api_key') || 'gateway-secret-key';
+    }
+    return 'gateway-secret-key';
+  });
   const [prompt, setPrompt] = useState(
     'Explain quantum computing in simple terms for a first-year computer science student.'
   );
+  const [tournament, setTournament] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<LiveRequestResult | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+
+  const handleKeyChange = (newKey: string) => {
+    setApiKey(newKey);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gateway_api_key', newKey);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!prompt.trim()) {
@@ -41,7 +54,7 @@ export const PlaygroundPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const responseData = await sendChatCompletion(prompt, apiKey);
+      const responseData = await sendChatCompletion(prompt, apiKey, tournament);
       setResult(responseData);
     } catch (err: unknown) {
       const apiErr = err as ApiError;
@@ -50,6 +63,7 @@ export const PlaygroundPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -87,13 +101,33 @@ export const PlaygroundPage: React.FC = () => {
           <div className="space-y-5">
             <ApiKeyInput
               apiKey={apiKey}
-              setApiKey={setApiKey}
+              setApiKey={handleKeyChange}
               disabled={isLoading}
             />
+
+            <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-md text-xs">
+              <div className="flex items-center gap-2">
+                <input
+                  id="tournament-mode-toggle"
+                  type="checkbox"
+                  checked={tournament}
+                  onChange={(e) => setTournament(e.target.checked)}
+                  disabled={isLoading}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500/20"
+                />
+                <label htmlFor="tournament-mode-toggle" className="font-semibold text-slate-800 cursor-pointer">
+                  Enable Multi-Model Tournament Mode
+                </label>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Runs candidates in parallel & selects best response with LLM Judge
+              </span>
+            </div>
 
             <PromptEditor
               prompt={prompt}
               setPrompt={setPrompt}
+
               onSubmit={handleSubmit}
               isLoading={isLoading}
             />

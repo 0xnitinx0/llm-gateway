@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -6,8 +6,8 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { CopyButton } from '../components/common/CopyButton';
-import { INITIAL_MOCK_API_KEYS } from '../../src/services/mockData';
 import { ApiKeyItem } from '../types/gateway';
+import { getApiKeys, createApiKey, revokeApiKey } from '../services/gateway';
 import {
   KeyRound,
   Plus,
@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
-  Info,
 } from 'lucide-react';
 
 interface OutletContextType {
@@ -26,38 +25,79 @@ interface OutletContextType {
 export const ApiKeysPage: React.FC = () => {
   const { setIsMobileOpen, gatewayOnline } = useOutletContext<OutletContextType>();
 
-  const [keys, setKeys] = useState<ApiKeyItem[]>(INITIAL_MOCK_API_KEYS);
+  const [keys, setKeys] = useState<ApiKeyItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyItem | null>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const fetchKeys = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getApiKeys();
+      setKeys(data);
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'detail' in err 
+        ? String((err as { detail: unknown }).detail) 
+        : 'Unable to load API keys.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchKeys();
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newKeyName.trim()) return;
 
-    const randomSuffix = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-    const fullKey = `gw_live_${randomSuffix}`;
-    const masked = `gw_live_${randomSuffix.substring(0, 4)}••••••••••••${randomSuffix.substring(randomSuffix.length - 4)}`;
+    setIsSubmitting(true);
+    try {
+      const res = await createApiKey(newKeyName.trim());
+      setKeys([res.key, ...keys]);
+      setCreatedSecret(res.secretKey);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gateway_api_key', res.secretKey);
+      }
 
-    const newKeyItem: ApiKeyItem = {
-      id: `key-${Date.now()}`,
-      name: newKeyName.trim(),
-      maskedKey: masked,
-      createdAt: 'Just now',
-      lastUsed: 'Never',
-      status: 'active',
-    };
-
-    setKeys([newKeyItem, ...keys]);
-    setCreatedSecret(fullKey);
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'detail' in err 
+        ? String((err as { detail: unknown }).detail) 
+        : 'Failed to create API key.';
+      alert(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleConfirmRevoke = () => {
+  const handleConfirmRevoke = async () => {
     if (!revokeTarget) return;
-    setKeys(keys.filter((k) => k.id !== revokeTarget.id));
-    setRevokeTarget(null);
+
+    setIsRevoking(true);
+    try {
+      await revokeApiKey(revokeTarget.id);
+      setKeys(
+        keys.map((k) => (k.id === revokeTarget.id ? { ...k, status: 'revoked' } : k))
+      );
+    } catch (err: unknown) {
+      const msg = err && typeof err === 'object' && 'detail' in err 
+        ? String((err as { detail: unknown }).detail) 
+        : 'Failed to revoke API key.';
+      alert(msg);
+    } finally {
+      setIsRevoking(false);
+      setRevokeTarget(null);
+    }
   };
 
   const resetCreateModal = () => {
@@ -86,79 +126,84 @@ export const ApiKeysPage: React.FC = () => {
       />
 
       <div className="px-4 sm:px-8 max-w-6xl mx-auto space-y-6">
-        {/* Transparent Disclaimer */}
-        <div className="rounded-lg bg-amber-50/70 border border-amber-200/80 p-4 flex items-start gap-3">
-          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-900 space-y-1">
-            <p className="font-semibold">Gateway Key Management Simulation</p>
-            <p className="leading-relaxed text-amber-800">
-              The keys created on this page manage client-side mock keys for multi-tenant simulation. The live FastAPI gateway currently authenticates requests using the single server secret configured in <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[11px]">GATEWAY_API_KEY</code> (default: <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[11px]">gateway-secret-key</code>).
-            </p>
-          </div>
-        </div>
-
         {/* API Keys Table Card */}
         <Card
-          title="Active Gateway Keys"
+          title="Gateway API Keys"
           subtitle="Client credentials authorized to call /v1/chat/completions"
-          headerAction={<Badge variant="demo">Demo State</Badge>}
           noPadding
         >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-medium uppercase tracking-wider">
-                <tr>
-                  <th className="py-3 px-5">Name</th>
-                  <th className="py-3 px-5">Key Token</th>
-                  <th className="py-3 px-5">Created</th>
-                  <th className="py-3 px-5">Last Used</th>
-                  <th className="py-3 px-5">Status</th>
-                  <th className="py-3 px-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-sans text-slate-700">
-                {keys.map((key) => (
-                  <tr key={key.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-5 font-semibold text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <KeyRound className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span>{key.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-5 font-mono text-slate-600">
-                      <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200/70">
-                        {key.maskedKey}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5 text-slate-500">{key.createdAt}</td>
-                    <td className="py-3.5 px-5 text-slate-500">{key.lastUsed}</td>
-                    <td className="py-3.5 px-5">
-                      <Badge variant="success">Active</Badge>
-                    </td>
-                    <td className="py-3.5 px-5 text-right">
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => setRevokeTarget(key)}
-                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                      >
-                        Revoke
-                      </Button>
-                    </td>
+          {loading ? (
+            <div className="p-8 text-center text-xs text-slate-500">Loading API keys...</div>
+          ) : error ? (
+            <div className="p-8 text-center text-xs text-red-600">{error}</div>
+          ) : keys.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500">
+              No portal API keys created yet. Click &quot;Create API Key&quot; above to generate one.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-medium uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-5">Name</th>
+                    <th className="py-3 px-5">Key Token</th>
+                    <th className="py-3 px-5">Created</th>
+                    <th className="py-3 px-5">Last Used</th>
+                    <th className="py-3 px-5">Status</th>
+                    <th className="py-3 px-5 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-sans text-slate-700">
+                  {keys.map((key) => (
+                    <tr key={key.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-5 font-semibold text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>{key.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-slate-600">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200/70">
+                          {key.maskedKey}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-slate-500">{key.createdAt}</td>
+                      <td className="py-3.5 px-5 text-slate-500">{key.lastUsed}</td>
+                      <td className="py-3.5 px-5">
+                        <Badge variant={key.status === 'active' ? 'success' : 'neutral'}>
+                          {key.status === 'active' ? 'Active' : 'Revoked'}
+                        </Badge>
+
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        {key.status === 'active' ? (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setRevokeTarget(key)}
+                            leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                          >
+                            Revoke
+                          </Button>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">Revoked</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
 
         {/* Security Assurance Notice */}
         <div className="rounded-lg border border-slate-200 bg-white p-5 flex items-start gap-3.5 shadow-2xs">
           <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
           <div className="text-xs text-slate-600 space-y-1">
-            <h4 className="font-semibold text-slate-900">Zero Provider Key Exposure</h4>
+            <h4 className="font-semibold text-slate-900">Zero Provider Key Exposure & Safe Storage</h4>
             <p className="leading-relaxed">
-              Your developers and frontends never touch Gemini or OpenAI tokens. Gateway API keys provide an impenetrable perimeter between your client applications and upstream AI vendors.
+              Your developers and frontends never touch Gemini or OpenAI tokens. Gateway API keys are stored securely using SHA-256 key hashing in PostgreSQL. Raw generated keys are displayed only once upon creation and are never persisted.
             </p>
           </div>
         </div>
@@ -208,9 +253,9 @@ export const ApiKeysPage: React.FC = () => {
                 variant="primary"
                 size="sm"
                 type="submit"
-                disabled={!newKeyName.trim()}
+                disabled={!newKeyName.trim() || isSubmitting}
               >
-                Create Key
+                {isSubmitting ? 'Creating...' : 'Create Key'}
               </Button>
             </div>
           </form>
@@ -268,8 +313,9 @@ export const ApiKeysPage: React.FC = () => {
               variant="danger"
               size="sm"
               onClick={handleConfirmRevoke}
+              disabled={isRevoking}
             >
-              Confirm Revoke
+              {isRevoking ? 'Revoking...' : 'Confirm Revoke'}
             </Button>
           </div>
         </div>

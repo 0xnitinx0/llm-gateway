@@ -101,7 +101,7 @@ export const DashboardPage: React.FC = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">
                   Intelligent Architecture
                 </span>
-                <Badge variant="demo">Demo Telemetry</Badge>
+                <Badge variant="live">Live Telemetry</Badge>
               </div>
               <h2 className="text-base sm:text-lg font-bold tracking-tight">
                 One Gateway. Three Pillars of Intelligent Optimization.
@@ -127,42 +127,42 @@ export const DashboardPage: React.FC = () => {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <MetricCard
             label="Total Requests"
-            value={isLoading ? '...' : metrics?.totalRequests.toLocaleString() || '1,248'}
+            value={isLoading ? '...' : metrics?.totalRequests !== undefined ? metrics.totalRequests.toLocaleString() : '0'}
             sublabel="Through gateway proxy"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Activity className="w-4 h-4" />}
           />
           <MetricCard
             label="Cache Hit Rate"
-            value={isLoading ? '...' : `${metrics?.cacheHitRate || 67.4}%`}
+            value={isLoading ? '...' : `${metrics?.cacheHitRate ?? 0}%`}
             sublabel="Vector similarity >= 0.75"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Zap className="w-4 h-4 text-emerald-500" />}
           />
           <MetricCard
             label="Tokens Saved"
-            value={isLoading ? '...' : metrics?.tokensSaved.toLocaleString() || '42,180'}
+            value={isLoading ? '...' : metrics?.tokensSaved !== null && metrics?.tokensSaved !== undefined ? metrics.tokensSaved.toLocaleString() : 'N/A'}
             sublabel="Deduplication + compression"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Minimize2 className="w-4 h-4 text-blue-500" />}
           />
           <MetricCard
             label="Est. Savings"
-            value={isLoading ? '...' : `$${metrics?.estimatedSavings.toFixed(2) || '12.84'}`}
+            value={isLoading ? '...' : metrics?.estimatedSavings !== null && metrics?.estimatedSavings !== undefined ? `$${metrics.estimatedSavings.toFixed(2)}` : 'N/A'}
             sublabel="Provider cost avoided"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<TrendingUp className="w-4 h-4 text-emerald-500" />}
           />
           <MetricCard
             label="Avg. Latency"
-            value={isLoading ? '...' : `${metrics?.averageLatencySec || 1.24}s`}
+            value={isLoading ? '...' : metrics?.averageLatencySec !== null && metrics?.averageLatencySec !== undefined ? `${metrics.averageLatencySec}s` : 'N/A'}
             sublabel="Combined cache & LLM"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Clock className="w-4 h-4 text-amber-500" />}
           />
         </div>
@@ -171,7 +171,7 @@ export const DashboardPage: React.FC = () => {
         <Card
           title="Request Overview"
           subtitle="Daily requests handled by the gateway"
-          headerAction={<Badge variant="demo">Demo Data</Badge>}
+          headerAction={<Badge variant="live">Live Data</Badge>}
         >
           <RequestOverviewChart data={chartData} />
         </Card>
@@ -182,7 +182,7 @@ export const DashboardPage: React.FC = () => {
           <Card
             title="Cache Performance"
             subtitle="Semantic vector hits vs misses"
-            headerAction={<Badge variant="demo">Demo Metric</Badge>}
+            headerAction={<Badge variant="live">Live Metric</Badge>}
             className="lg:col-span-1"
           >
             {cacheData ? (
@@ -205,7 +205,7 @@ export const DashboardPage: React.FC = () => {
                   How the gateway optimizes every request
                 </p>
               </div>
-              <Badge variant="preview">Architecture Preview</Badge>
+              <Badge variant="live">Live Optimization</Badge>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -216,17 +216,17 @@ export const DashboardPage: React.FC = () => {
                     <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
                       <Database className="w-3.5 h-3.5" />
                     </div>
-                    <Badge variant="demo">Demo metric</Badge>
+                    <Badge variant="live">Live</Badge>
                   </div>
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
                     Semantic Deduplication
                   </h4>
                   <div className="mt-2.5">
-                    <span className="text-2xl font-bold text-slate-900 font-mono">67.4%</span>
+                    <span className="text-2xl font-bold text-slate-900 font-mono">{metrics?.cacheHitRate ?? 0}%</span>
                     <p className="text-[11px] text-slate-500 font-medium">cache hit rate</p>
                   </div>
                   <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    436 requests served directly from cache. Fewer redundant LLM calls save compute and cost.
+                    Avoids redundant LLM inference calls when query matches previous query embeddings.
                   </p>
                 </div>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-blue-600 font-medium">
@@ -242,17 +242,17 @@ export const DashboardPage: React.FC = () => {
                     <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
                       <Minimize2 className="w-3.5 h-3.5" />
                     </div>
-                    <Badge variant="demo">Demo metric</Badge>
+                    <Badge variant="live">Live</Badge>
                   </div>
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
                     Prompt Compression
                   </h4>
                   <div className="mt-2.5">
-                    <span className="text-2xl font-bold text-slate-900 font-mono">30%</span>
-                    <p className="text-[11px] text-slate-500 font-medium">token reduction</p>
+                    <span className="text-2xl font-bold text-slate-900 font-mono">Active</span>
+                    <p className="text-[11px] text-slate-500 font-medium">context optimization</p>
                   </div>
                   <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    18,060 tokens saved. Strips redundant prompt context before forwarding to the provider.
+                    Strips filler phrases and redundant text before forwarding prompts to provider.
                   </p>
                 </div>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium">
@@ -268,17 +268,17 @@ export const DashboardPage: React.FC = () => {
                     <div className="w-7 h-7 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center">
                       <Trophy className="w-3.5 h-3.5" />
                     </div>
-                    <Badge variant="planned">Planned / Demo</Badge>
+                    <Badge variant="live">Live</Badge>
                   </div>
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
                     Response Tournament
                   </h4>
                   <div className="mt-2.5">
-                    <span className="text-2xl font-bold text-slate-900 font-mono">124</span>
-                    <p className="text-[11px] text-slate-500 font-medium">tournaments run</p>
+                    <span className="text-2xl font-bold text-slate-900 font-mono">Enabled</span>
+                    <p className="text-[11px] text-slate-500 font-medium">multi-model ranking</p>
                   </div>
                   <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    3 candidates evaluated on average. Best response autonomously selected by gateway judge.
+                    Evaluates candidate model responses in parallel and selects top response using LLM judge.
                   </p>
                 </div>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-purple-600 font-medium">
@@ -294,7 +294,7 @@ export const DashboardPage: React.FC = () => {
         <Card
           title="Recent Activity"
           subtitle="Request identifiers and vector cache similarity (prompt contents strictly protected)"
-          headerAction={<Badge variant="demo">Demo Telemetry</Badge>}
+          headerAction={<Badge variant="live">Live Telemetry</Badge>}
           noPadding
         >
           <div className="overflow-x-auto">
@@ -309,31 +309,39 @@ export const DashboardPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
-                {activity.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3 px-5 text-slate-500 font-sans">{item.time}</td>
-                    <td className="py-3 px-5 font-semibold text-slate-900">
-                      <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
-                        {item.id}
-                      </span>
-                    </td>
-                    <td className="py-3 px-5 font-sans">
-                      <Badge variant={item.result === 'HIT' ? 'hit' : 'miss'}>
-                        {item.result}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-5">
-                      {item.similarity !== null ? (
-                        <span className="text-emerald-700 font-medium">{item.similarity}</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-5 text-right font-medium text-slate-900">
-                      {item.latency}
+                {activity.length > 0 ? (
+                  activity.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3 px-5 text-slate-500 font-sans">{item.time}</td>
+                      <td className="py-3 px-5 font-semibold text-slate-900">
+                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
+                          {item.id}
+                        </span>
+                      </td>
+                      <td className="py-3 px-5 font-sans">
+                        <Badge variant={item.result === 'HIT' ? 'hit' : 'miss'}>
+                          {item.result}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-5">
+                        {item.similarity !== null ? (
+                          <span className="text-emerald-700 font-medium">{item.similarity}</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-5 text-right font-medium text-slate-900">
+                        {item.latency}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
+                      No activity recorded yet. Submit prompts in the Playground to see live requests.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

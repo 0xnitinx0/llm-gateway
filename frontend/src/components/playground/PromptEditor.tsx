@@ -98,7 +98,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       {/* Action Footer */}
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
         <div className="text-[11px] text-slate-500">
-          Backend model: <span className="font-mono font-medium text-slate-700">gemini-3.5-flash</span> (auto-routed by Gateway)
+          Gateway Router: <span className="font-mono font-medium text-slate-700">Intelligent Auto-Routing</span> (Groq / Cerebras / Gemini)
         </div>
 
         <Button

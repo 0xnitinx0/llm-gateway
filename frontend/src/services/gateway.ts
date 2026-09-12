@@ -4,8 +4,10 @@ import {
   GatewayChatResponse,
   HealthResponse,
   LiveRequestResult,
+  ApiKeyItem,
   ApiError,
 } from '../types/gateway';
+
 
 /**
  * Check if the backend Gateway is online via GET /health
@@ -30,7 +32,8 @@ export async function checkGatewayHealth(): Promise<boolean> {
  */
 export async function sendChatCompletion(
   prompt: string,
-  apiKey: string
+  apiKey: string,
+  tournament: boolean = false
 ): Promise<LiveRequestResult> {
   if (!prompt.trim()) {
     const error: ApiError = {
@@ -55,6 +58,7 @@ export async function sendChatCompletion(
         content: prompt.trim(),
       },
     ],
+    tournament,
   };
 
   const startTime = performance.now();
@@ -73,8 +77,17 @@ export async function sendChatCompletion(
 
     return {
       response: data.response,
+      cache_hit: data.cache_hit,
+      similarity: data.similarity,
+      winning_model: data.winning_model,
+      judge_score: data.judge_score,
+      provider: data.provider,
+      model: data.model,
+      candidates: data.candidates,
+      candidate_count: data.candidate_count,
       roundTripLatencyMs: durationMs,
       timestamp: new Date().toLocaleTimeString(),
+      tournament,
     };
   } catch (err: unknown) {
     const apiErr = err as ApiError;
@@ -92,3 +105,32 @@ export async function sendChatCompletion(
     throw err;
   }
 }
+
+/**
+  Fetch all Gateway API keys from backend POST /v1/api-keys
+ */
+export async function getApiKeys(): Promise<ApiKeyItem[]> {
+  return apiRequest<ApiKeyItem[]>('/v1/api-keys');
+}
+
+/**
+  Create a new Gateway API key via backend POST /v1/api-keys
+ */
+export async function createApiKey(
+  name: string
+): Promise<{ key: ApiKeyItem; secretKey: string }> {
+  return apiRequest<{ key: ApiKeyItem; secretKey: string }>('/v1/api-keys', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+/**
+  Revoke a Gateway API key via backend DELETE /v1/api-keys/{key_id}
+ */
+export async function revokeApiKey(keyId: string): Promise<{ status: string }> {
+  return apiRequest<{ status: string }>(`/v1/api-keys/${keyId}`, {
+    method: 'DELETE',
+  });
+}
+

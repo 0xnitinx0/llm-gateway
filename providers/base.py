@@ -6,6 +6,11 @@ class LLMProvider(ABC):
     """Abstract base class for LLM provider implementations."""
 
     @abstractmethod
+    def is_available(self) -> bool:
+        """Check if provider API key and configuration are available."""
+        pass
+
+    @abstractmethod
     async def generate(self, messages: List[Any]) -> Tuple[str, Optional[dict]]:
         """Generate a text response and token usage metrics from chat messages."""
         pass

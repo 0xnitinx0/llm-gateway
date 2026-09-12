@@ -92,34 +92,34 @@ export const CachePage: React.FC = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <MetricCard
             label="Cache Hit Rate"
-            value={isLoading ? '...' : `${cacheSummary?.hitRate || 67.4}%`}
+            value={isLoading ? '...' : `${cacheSummary?.hitRate ?? 0}%`}
             sublabel="Vector threshold >= 0.75"
-            badgeVariant="demo"
-            badgeText="Demo"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Zap className="w-4 h-4 text-emerald-500" />}
           />
           <MetricCard
-            label="Total Cached Entries"
-            value={isLoading ? '...' : (cacheSummary?.hits || 842).toLocaleString()}
-            sublabel="Active vector embeddings"
-            badgeVariant="demo"
-            badgeText="Demo"
+            label="Cache Hits"
+            value={isLoading ? '...' : (cacheSummary?.hits ?? 0).toLocaleString()}
+            sublabel="Direct vector cache hits"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Database className="w-4 h-4 text-blue-500" />}
           />
           <MetricCard
-            label="Requests Served From Cache"
-            value={isLoading ? '...' : '436'}
-            sublabel="Zero model tokens consumed"
-            badgeVariant="demo"
-            badgeText="Demo"
+            label="Cache Misses"
+            value={isLoading ? '...' : (cacheSummary?.misses ?? 0).toLocaleString()}
+            sublabel="Forwarded to provider"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Layers className="w-4 h-4 text-purple-500" />}
           />
           <MetricCard
-            label="Average Similarity"
-            value={isLoading ? '...' : '0.89'}
-            sublabel="Cosine match quality"
-            badgeVariant="demo"
-            badgeText="Demo"
+            label="Active Entries"
+            value={isLoading ? '...' : activity.length.toLocaleString()}
+            sublabel="Entries in vector memory"
+            badgeVariant="live"
+            badgeText="Live"
             icon={<Sparkles className="w-4 h-4 text-amber-500" />}
           />
         </div>
@@ -128,13 +128,13 @@ export const CachePage: React.FC = () => {
         <Card
           title="Similarity Distribution"
           subtitle="Frequency breakdown of vector cosine similarity scores on incoming queries"
-          headerAction={<Badge variant="demo">Demo Data</Badge>}
+          headerAction={<Badge variant="live">Live Data</Badge>}
         >
           <div className="space-y-3">
             <SimilarityBarChart data={similarityData} />
             <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100 pt-3">
               <span>Threshold line: <strong>0.75</strong> (queries above 0.75 are evaluated as semantic cache hits)</span>
-              <span className="font-mono">Cosine distance model: text-embedding-004</span>
+              <span className="font-mono">Cosine distance model: gemini-embedding-001</span>
             </div>
           </div>
         </Card>
@@ -143,7 +143,7 @@ export const CachePage: React.FC = () => {
         <Card
           title="Recent Cache Activity"
           subtitle="Anonymized vector lookup results and entry IDs"
-          headerAction={<Badge variant="demo">Demo Telemetry</Badge>}
+          headerAction={<Badge variant="live">Live Telemetry</Badge>}
           noPadding
         >
           <div className="overflow-x-auto">
@@ -158,37 +158,45 @@ export const CachePage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
-                {activity.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3 px-5 text-slate-500 font-sans">{item.time}</td>
-                    <td className="py-3 px-5 font-semibold text-slate-900">
-                      <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
-                        {item.id}
-                      </span>
-                    </td>
-                    <td className="py-3 px-5">
-                      <span
-                        className={`font-semibold ${
-                          item.similarity >= 0.85
-                            ? 'text-emerald-700'
-                            : item.similarity >= 0.75
-                            ? 'text-blue-700'
-                            : 'text-amber-700'
-                        }`}
-                      >
-                        {item.similarity}
-                      </span>
-                    </td>
-                    <td className="py-3 px-5 font-sans">
-                      <Badge variant={item.result === 'HIT' ? 'hit' : 'miss'}>
-                        {item.result}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-5 text-right font-medium text-slate-900">
-                      {item.latency}
+                {activity.length > 0 ? (
+                  activity.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3 px-5 text-slate-500 font-sans">{item.time}</td>
+                      <td className="py-3 px-5 font-semibold text-slate-900">
+                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
+                          {item.id}
+                        </span>
+                      </td>
+                      <td className="py-3 px-5">
+                        <span
+                          className={`font-semibold ${
+                            item.similarity >= 0.85
+                              ? 'text-emerald-700'
+                              : item.similarity >= 0.75
+                              ? 'text-blue-700'
+                              : 'text-amber-700'
+                          }`}
+                        >
+                          {item.similarity}
+                        </span>
+                      </td>
+                      <td className="py-3 px-5 font-sans">
+                        <Badge variant={item.result === 'HIT' ? 'hit' : 'miss'}>
+                          {item.result}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-5 text-right font-medium text-slate-900">
+                        {item.latency}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
+                      No active cache entries stored in memory. Submit requests to build cache vectors.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

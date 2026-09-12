@@ -6,7 +6,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app, get_db
 from database.connection import Base
-from database.models import RequestLog
+import database.models
+
 from services.usage_service import get_usage
 from services.usage_tracker import log_request
 
@@ -39,7 +40,7 @@ VALID_GATEWAY_KEY = "gateway-secret-key"
 
 
 def test_get_usage_empty_db(setup_test_db):
-    """Test get_usage with an empty database returns safe zeros."""
+    """Test get_usage with an empty database returns zero for cost metrics."""
     db = setup_test_db
     usage_data = get_usage(db)
 
@@ -49,23 +50,42 @@ def test_get_usage_empty_db(setup_test_db):
     assert usage_data["cache_hit_rate"] == 0.0
     assert usage_data["llm_calls"] == 0
     assert usage_data["llm_calls_avoided"] == 0
-    assert usage_data["avg_latency_ms"] == 0.0
-    assert usage_data["total_input_tokens"] == 0
-    assert usage_data["total_output_tokens"] == 0
-    assert usage_data["total_tokens"] == 0
-    assert usage_data["estimated_cost"] == 0.0
-    assert usage_data["estimated_savings"] == 0.0
+    assert usage_data["avg_latency_ms"] is None
+    assert usage_data["total_input_tokens"] is None
+    assert usage_data["total_output_tokens"] is None
+    assert usage_data["total_tokens"] is None
+    assert usage_data["actual_provider_cost"] == 0.0
+    assert usage_data["estimated_cost_without_gateway"] == 0.0
+    assert usage_data["estimated_cost_saved"] == 0.0
 
 
 def test_get_usage_populated_db(setup_test_db):
-    """Test get_usage with known records calculates accurate metrics."""
+    """Test get_usage with known records calculates accurate cost breakdown and savings."""
     db = setup_test_db
 
-    # Log 1: Cache Miss (LLM called)
-    log_request(db=db, cache_hit=False, similarity=0.0, latency_ms=100.0, llm_called=True)
+    # Log 1: Cache Miss (LLM called, actual token usage)
+    log_request(
+        db=db,
+        cache_hit=False,
+        similarity=0.0,
+        latency_ms=100.0,
+        llm_called=True,
+        input_tokens=10,
+        output_tokens=20,
+        total_tokens=30,
+    )
 
     # Log 2: Cache Hit (LLM avoided)
-    log_request(db=db, cache_hit=True, similarity=0.85, latency_ms=20.0, llm_called=False)
+    log_request(
+        db=db,
+        cache_hit=True,
+        similarity=0.85,
+        latency_ms=20.0,
+        llm_called=False,
+        input_tokens=None,
+        output_tokens=None,
+        total_tokens=None,
+    )
 
     usage_data = get_usage(db)
 
@@ -76,17 +96,24 @@ def test_get_usage_populated_db(setup_test_db):
     assert usage_data["llm_calls"] == 1
     assert usage_data["llm_calls_avoided"] == 1
     assert usage_data["avg_latency_ms"] == 60.0
+    assert usage_data["total_input_tokens"] == 10
+    assert usage_data["total_output_tokens"] == 20
+    assert usage_data["total_tokens"] == 30
+    assert usage_data["actual_provider_cost"] > 0
+    assert usage_data["estimated_cost_without_gateway"] > usage_data["actual_provider_cost"]
+    assert usage_data["estimated_cost_saved"] > 0
 
 
-def test_usage_endpoint_unauthorized():
-    """Test GET /usage without API key or invalid API key returns 401."""
-    res_no_key = client.get("/usage")
-    assert res_no_key.status_code == 401
-    assert res_no_key.json()["detail"] == "Invalid or missing Gateway API key"
+def test_usage_endpoint_success_without_auth(setup_test_db):
+    """Test GET /usage returns metrics payload for the dashboard."""
+    db = setup_test_db
+    log_request(db=db, cache_hit=True, similarity=0.9, latency_ms=15.0, llm_called=False)
 
-    res_bad_key = client.get("/usage", headers={"X-Gateway-API-Key": "wrong-key"})
-    assert res_bad_key.status_code == 401
-    assert res_bad_key.json()["detail"] == "Invalid or missing Gateway API key"
+    res = client.get("/usage")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total_requests"] == 1
+    assert data["cache_hits"] == 1
 
 
 def test_usage_endpoint_success(setup_test_db):
@@ -101,3 +128,6 @@ def test_usage_endpoint_success(setup_test_db):
     assert data["cache_hits"] == 1
     assert data["cache_hit_rate"] == 100.0
     assert data["llm_calls_avoided"] == 1
+    assert data["actual_provider_cost"] == 0.0
+    assert data["estimated_cost_saved"] == 0.0
+

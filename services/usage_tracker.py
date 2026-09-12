@@ -10,13 +10,18 @@ from database.models import RequestLog
 def calculate_cost(input_tokens: Optional[int], output_tokens: Optional[int]) -> Optional[float]:
     if input_tokens is None or output_tokens is None:
         return None
+
+    input_rate_str = os.getenv("INPUT_COST_PER_1K_TOKENS", "0.00015")
+    output_rate_str = os.getenv("OUTPUT_COST_PER_1K_TOKENS", "0.0006")
+
     try:
-        input_rate = float(os.getenv("INPUT_COST_PER_1K_TOKENS", "0.000075"))
-        output_rate = float(os.getenv("OUTPUT_COST_PER_1K_TOKENS", "0.0003"))
+        input_rate = float(input_rate_str)
+        output_rate = float(output_rate_str)
         cost = (input_tokens / 1000.0) * input_rate + (output_tokens / 1000.0) * output_rate
         return round(cost, 6)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
+
 
 
 def log_request(

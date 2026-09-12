@@ -16,17 +16,34 @@ const getBaseUrl = (): string => {
 
 export const API_BASE_URL = getBaseUrl();
 
+export const getGatewayApiKey = (): string | null => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('gateway_api_key');
+    if (stored) return stored;
+  }
+  return import.meta.env.VITE_GATEWAY_API_KEY || null;
+};
+
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
+  const defaultHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const apiKey = getGatewayApiKey();
+  if (apiKey) {
+    defaultHeaders['X-Gateway-API-Key'] = apiKey;
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...defaultHeaders,
         ...options.headers,
       },
     });
