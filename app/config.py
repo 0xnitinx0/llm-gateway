@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List
+from typing import List, Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 384
     local_token_delay_ms: int = 35
     enabled_providers: str = "local"
-    compression_min_tokens: int = 30
-    compression_target_ratio: float = 0.70
+    compression_strategy: Literal["basic", "conservative_tfidf"] = "conservative_tfidf"
+    compression_min_tokens: int = Field(default=30, ge=0)
+    compression_target_ratio: float = Field(default=0.70, gt=0.0, le=1.0)
     tournament_providers: str = "auto"
     judge_provider: str = "auto"
     model_pricing_json: str = "{}"

@@ -63,4 +63,4 @@ class HashingEmbedder:
         return [value / norm for value in vector]
 
     def count_tokens(self, text: str) -> int:
-        return len(text.split()
+        return len(text.split())

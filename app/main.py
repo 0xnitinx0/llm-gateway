@@ -161,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             embedder.count_tokens,
             settings.compression_min_tokens,
             settings.compression_target_ratio,
+            strategy=settings.compression_strategy,
         )
         app.state.cache = PgVectorSemanticCache(settings.cache_similarity_threshold)
         app.state.cost_estimator = CostEstimator(settings.model_pricing_json)
@@ -169,7 +170,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 name: providers[name]
                 for name in settings.enabled_provider_names
                 if name in providers
-            }
+            },
+            token_counter=embedder.count_tokens,
         )
         app.state.tournament = TournamentService(
             providers,
@@ -253,7 +255,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 stream_provider = None
                 prompt_tokens = stats.original_tokens
             else:
-                stream_provider = app.state.router.streaming_provider(canonical, compressed)
+                stream_provider = app.state.router.streaming_provider(canonical, compressed, original_messages=payload.messages)
                 provider = stream_provider.name
                 model = stream_provider.model_name
                 source_text = None
@@ -394,6 +396,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 result = await app.state.router.execute(
                     compressed,
                     prompt=canonical,
+                    original_messages=payload.messages,
                     temperature=payload.temperature,
                     max_tokens=payload.max_tokens,
                 )
@@ -604,6 +607,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "cache_similarity_threshold": settings.cache_similarity_threshold,
             "embedding_model": settings.embedding_model,
             "embedding_dimensions": settings.embedding_dimensions,
+            "compression_strategy": settings.compression_strategy,
             "compression_min_tokens": settings.compression_min_tokens,
             "compression_target_ratio": settings.compression_target_ratio,
             "enabled_providers": settings.enabled_provider_names,

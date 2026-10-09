@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 
 import structlog
 
@@ -12,17 +12,17 @@ logger = structlog.get_logger("llm_gateway.router")
 class ModelRouter:
     """Select one provider, then fail over sequentially without normal-mode fan-out."""
 
-    def __init__(self, providers: dict[str, LLMProvider]):
+    def __init__(self, providers: dict[str, LLMProvider], token_counter: Callable[[str], int] | None = None):
         self.providers = providers
-        self.classifier = RequestClassifier()
+        self.classifier = RequestClassifier(token_counter)
         self.rule_engine = RoutingRuleEngine()
 
     def available(self) -> dict[str, LLMProvider]:
         return {name: provider for name, provider in self.providers.items() if provider.is_available()}
 
-    def candidates(self, prompt: str, messages: list[Any]) -> list[str]:
+    def candidates(self, prompt: str, messages: list[Any], *, original_messages: list[Any] | None = None) -> list[str]:
         available = list(self.available())
-        classification = self.classifier.classify(prompt, messages)
+        classification = self.classifier.classify(prompt, messages, original_messages=original_messages)
         ordered = self.rule_engine.select_candidates(classification, available)
         if "local" in available and "local" not in ordered:
             ordered.append("local")
@@ -35,10 +35,11 @@ class ModelRouter:
         prompt: str,
         temperature: float,
         max_tokens: int | None,
+        original_messages: list[Any] | None = None,
     ) -> ProviderResult:
         errors = []
         providers = self.available()
-        for name in self.candidates(prompt, messages):
+        for name in self.candidates(prompt, messages, original_messages=original_messages):
             try:
                 return await providers[name].generate(
                     messages,
@@ -56,9 +57,9 @@ class ModelRouter:
                 )
         raise RuntimeError("All providers failed: " + "; ".join(errors))
 
-    def streaming_provider(self, prompt: str, messages: list[Any]) -> LLMProvider:
+    def streaming_provider(self, prompt: str, messages: list[Any], *, original_messages: list[Any] | None = None) -> LLMProvider:
         providers = self.available()
-        candidates = self.candidates(prompt, messages)
+        candidates = self.candidates(prompt, messages, original_messages=original_messages)
         if not candidates:
             raise RuntimeError("No provider is available")
         return providers[candidates[0]]

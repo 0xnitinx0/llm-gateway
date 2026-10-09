@@ -1,78 +1,99 @@
 import re
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, Callable
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+from services.routing.task_examples import TASK_EXAMPLES
 
 
 @dataclass
 class RequestClassification:
-    task_type: str  # "coding", "reasoning", "simple"
-    complexity: str  # "low", "medium", "high"
+    task_type: str  # coding, reasoning, general, simple
+    complexity: str
     estimated_input_tokens: int
     context_size: int
     latency_sensitive: bool
 
 
 class RequestClassifier:
-    """Lightweight, deterministic local classifier using heuristics and regex (0 LLM calls)."""
+    """Local lexical example matching with explicit syntax and ambiguity rules."""
 
-    CODING_KEYWORDS = re.compile(
-        r"\b(def|class|import|function|const|let|var|return|async|await|select|from|where|"
-        r"python|javascript|typescript|react|html|css|c\+\+|java|rust|go|sql|leetcode|debug|"
-        r"refactor|algorithm|code|bug|syntax|api|json|endpoint|schema|regex|pointer|dataframe)\b|```",
-        re.IGNORECASE,
+    CODING_SYNTAX = re.compile(
+        r"```|\bdef\s+\w+\s*\(|\b(?:const|let|var)\s+\w+\s*=|"
+        r"\bSELECT\s+.+\s+FROM\b|\bclass\s+\w+\s*[:{]|\bfunction\s+\w+\s*\(", re.I
+    )
+    MATH = re.compile(
+        r"\b(?:prove|theorem|equation|calculus|integral|derivative|algebra|probability)\b|"
+        r"\b\w+\s*[+*/^]\s*\w+\s*=", re.I
+    )
+    CODING = re.compile(
+        r"\b(?:debug|refactor|programming|compiler|syntax error|unit tests?|"
+        r"python|javascript|typescript|react|html|css|rust|sql|leetcode|"
+        r"code|endpoint|regex|dataframe)\b|\bc\+\+\b", re.I
+    )
+    REASONING = re.compile(
+        r"\b(?:proof|solve|deduce|tradeoffs|trade-offs|hypothesis|logic puzzle|"
+        r"step.by.step|compare and contrast|architectural decision|causal|"
+        r"evaluate the impact|weigh the evidence|formulate)\b", re.I
+    )
+    GENERAL = re.compile(r"\b(?:summari[sz]e|summary|overview|tell me about|history of|explain|describe)\b", re.I)
+    FOLLOWUP = re.compile(
+        r"^(?:and |also )?(?:why|how|continue|go on|explain more|tell me more|"
+        r"make it .*|do it .*|what about .*|can you expand.*|expand on (?:it|that))\s*[.!?]*$", re.I
     )
 
-    REASONING_KEYWORDS = re.compile(
-        r"\b(prove|proof|math|theorem|equation|solve|calculus|integral|derivative|algebra|"
-        r"step-by-step|step by step|multi-step|logic|deduce|hypothesis|evaluate the impact|"
-        r"trade-offs|tradeoffs|compare and contrast|architectural decision|formulate)\b",
-        re.IGNORECASE,
-    )
+    def __init__(self, token_counter: Callable[[str], int] | None = None):
+        self.count_tokens = token_counter or (lambda text: max(1, len(text) // 4) if text else 0)
+        self.labels = [label for label, examples in TASK_EXAMPLES.items() for _ in examples]
+        self.vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True, stop_words="english")
+        self.examples = self.vectorizer.fit_transform(
+            [example for examples in TASK_EXAMPLES.values() for example in examples]
+        )
 
-    GENERAL_KEYWORDS = re.compile(
-        r"\b(summarize|summary|overview|general knowledge|briefly|tell me about|history of)\b",
-        re.IGNORECASE,
-    )
+    @staticmethod
+    def _parts(message: Any) -> tuple[str, str]:
+        if isinstance(message, dict):
+            return str(message.get("role", "user")), str(message.get("content", ""))
+        return str(getattr(message, "role", "user")), str(getattr(message, "content", ""))
 
-    def classify(self, prompt_text: str, messages: List[Any]) -> RequestClassification:
-        total_text = prompt_text or ""
-        for msg in messages:
-            if isinstance(msg, dict):
-                total_text += " " + msg.get("content", "")
-            else:
-                total_text += " " + getattr(msg, "content", "")
+    def _task(self, text: str) -> str:
+        if self.CODING_SYNTAX.search(text):
+            return "coding"
+        if self.MATH.search(text):
+            return "reasoning"
+        similarities = cosine_similarity(self.vectorizer.transform([text]), self.examples)[0]
+        scores = {label: max(score for score, candidate in zip(similarities, self.labels) if candidate == label)
+                  for label in TASK_EXAMPLES}
+        ranked = sorted(scores, key=scores.get, reverse=True)
+        if scores[ranked[0]] >= 0.20 and scores[ranked[0]] - scores[ranked[1]] >= 0.05:
+            return ranked[0]
+        if self.CODING.search(text):
+            return "coding"
+        if self.REASONING.search(text):
+            return "reasoning"
+        if self.GENERAL.search(text):
+            return "general"
+        return "simple"
 
-        # Estimate tokens (~4 characters per token)
-        char_count = len(total_text)
-        estimated_tokens = max(1, char_count // 4)
-
-        is_coding = bool(self.CODING_KEYWORDS.search(total_text))
-        is_reasoning = bool(self.REASONING_KEYWORDS.search(total_text))
-        is_general = bool(self.GENERAL_KEYWORDS.search(total_text))
-
-        if is_coding:
-            task_type = "coding"
-        elif is_reasoning:
-            task_type = "reasoning"
-        elif is_general:
-            task_type = "general"
-        else:
-            task_type = "simple"
-
-        if estimated_tokens > 2000 or is_reasoning:
-            complexity = "high"
-        elif estimated_tokens > 500 or is_coding:
-            complexity = "medium"
-        else:
-            complexity = "low"
-
-        # Simple & short prompts are latency sensitive
-        latency_sensitive = (task_type == "simple" and estimated_tokens < 300) or ("fast" in total_text.lower())
-
+    def classify(
+        self, prompt_text: str, messages: list[Any], *, original_messages: list[Any] | None = None,
+    ) -> RequestClassification:
+        original = original_messages if original_messages is not None else messages
+        users = [content for role, content in map(self._parts, original) if role == "user"]
+        task_text = users[-1] if users else (prompt_text if not original else "")
+        if len(task_text.split()) <= 12 and self.FOLLOWUP.fullmatch(task_text.strip()) and len(users) > 1:
+            task_text = users[-2] + "\n" + task_text
+        task_type = self._task(task_text)
+        # Count forwarded content exactly once, including system and assistant context.
+        estimated_tokens = sum(self.count_tokens(content) for _, content in map(self._parts, messages))
+        complexity = "high" if estimated_tokens > 2000 or task_type == "reasoning" else (
+            "medium" if estimated_tokens > 500 or task_type == "coding" else "low"
+        )
         return RequestClassification(
-            task_type=task_type,
-            complexity=complexity,
-            estimated_input_tokens=estimated_tokens,
-            context_size=estimated_tokens,
-            latency_sensitive=latency_sensitive,
+            task_type=task_type, complexity=complexity,
+            estimated_input_tokens=estimated_tokens, context_size=estimated_tokens,
+            latency_sensitive=(task_type == "simple" and estimated_tokens < 300)
+            or bool(re.search(r"\b(?:fast|quickly|urgent)\b", task_text, re.I)),
         )

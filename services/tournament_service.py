@@ -137,11 +137,13 @@ class TournamentService:
         names = list(CLOUD_PROVIDERS) if self.candidate_names == ["auto"] else self.candidate_names
         if any(name not in CLOUD_PROVIDERS for name in names):
             raise RuntimeError("Tournament candidates must be cloud providers; set TOURNAMENT_PROVIDERS=auto")
+
         selected = []
         for name in dict.fromkeys(names):
             provider = self.providers.get(name)
             if provider and provider.is_available():
                 selected.append((name, provider))
+
         return selected[:3]
 
     async def run(
@@ -156,12 +158,15 @@ class TournamentService:
         if len(configured) < 2:
             available = ", ".join(name for name, _ in configured) or "none"
             raise RuntimeError(f"Tournament requires API keys for at least two cloud providers; available: {available}")
+
         if self.judge_name != "auto" and self.judge_name not in CLOUD_PROVIDERS:
             raise RuntimeError("Tournament judge must be a cloud provider; set JUDGE_PROVIDER=auto")
+
         outcomes = await asyncio.gather(*[
             self._candidate(f"candidate-{index + 1}", provider, messages, temperature, max_tokens)
             for index, (_, provider) in enumerate(configured)
         ])
+        
         successful = [item for item in outcomes if item.result]
         if len(successful) < 2:
             failures = ", ".join(f"{item.provider}: {item.error}" for item in outcomes if item.error)
@@ -177,6 +182,7 @@ class TournamentService:
         judge_results: list[ProviderResult] = []
         judge_attempts = 0
         failures = []
+        
         for name in judge_names:
             judge = self.providers.get(name)
             if not judge or not judge.is_available():
@@ -194,8 +200,10 @@ class TournamentService:
                     if getattr(exc, "response", None) is not None:
                         break
                     continue
+                    
                 winner = next(item for item in successful if item.candidate_id == parsed["winner_id"])
                 charged = [item.result for item in successful] + judge_results
+                
                 return TournamentOutcome(
                     winner_id=winner.candidate_id,
                     winning_response=winner.result.text,
@@ -212,4 +220,5 @@ class TournamentService:
                     judge_results=judge_results,
                     judge_attempts=judge_attempts,
                 )
+                
         raise RuntimeError("Cloud judge failed; " + ", ".join(failures))

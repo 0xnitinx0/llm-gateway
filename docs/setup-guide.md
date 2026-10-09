@@ -487,3 +487,40 @@ Enter the exact `ADMIN_API_KEY` value in frontend Settings. A gateway API key ca
 ### The embedding build fails
 
 The initial image build needs internet access to download the model. Once the image is built, the default local runtime does not need internet or paid provider credentials.
+
+### Local compression and routing algorithms
+
+`COMPRESSION_STRATEGY=conservative_tfidf` is the default. Set it to `basic` to use
+request-introduction cleanup and exact prose sentence deduplication alone. Both
+strategies preserve non-user messages and protect code, quotations, structured
+data, lists, and indentation-sensitive text. Cleanup begins at
+`COMPRESSION_MIN_TOKENS=30` across the request. `COMPRESSION_TARGET_RATIO=0.70` is
+a soft goal: distinct facts and constraints take priority, so the achieved ratio
+may be higher. Sentences are never discarded merely to hit that goal.
+
+The TF-IDF strategy additionally compares prose sentences using cosine similarity
+(minimum 0.92). Removal requires matching constraint/number markers and the same
+ordered content words after excluding articles. This conservative check permits
+minor wording redundancy without accepting bag-of-words reversals or added facts.
+Messages containing more than 200 prose sentences use basic cleanup to bound
+pairwise comparison work. Ambiguous structured content is kept unchanged.
+
+Routing uses word unigram/bigram TF-IDF matching against synthetic examples in
+`services/routing/task_examples.py`, fitted once when the router starts. Clear code
+syntax and explicit math override matching. Otherwise, a category needs a score
+of at least 0.20 and a lead of at least 0.05; ambiguous requests use focused rules,
+then default to `simple`. This is lexical classification, so unfamiliar wording
+can still be misclassified. It does not download a model or call a cloud service.
+
+Task selection uses the original latest user turn, with the preceding user turn
+for short ambiguous follow-ups. Generic system instructions do not choose the
+task. Context sizing counts the forwarded compressed messages once using the
+existing approximate token counter; these figures are not provider tokenizer
+counts. Streaming and regular requests share the same classification path.
+
+The active strategy appears in `/v1/admin/config` and existing compression
+metrics, including the compression preview and tournament responses. No request
+selector is needed. Reinstall `requirements.txt` and restart the gateway after
+changing these settings. Run `pytest tests/test_classifier.py -s` to see the
+held-out synthetic evaluation against the previous keyword baseline; it is a
+regression check, not a production accuracy guarantee.
