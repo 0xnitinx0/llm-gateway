@@ -35,3 +35,19 @@ Dashboard, Usage, Cache, and API Keys require the separate admin key. Enter it o
 
     npm test
     npm run build
+
+## Guided workspace demo
+
+Use **Start demo** to open `/demo`. The six steps cover readiness, compression,
+semantic caching, routing and streaming, tournaments, and rate limiting.
+All live inference actions are explicit. An optional **Use sample walkthrough**
+action enables labeled illustrative fixtures and makes no feature API requests.
+Completed results and dedicated demo secrets persist in browser session storage.
+
+See the [presenter checklist](../docs/presenter-checklist.md) for setup,
+a 5–7 minute sequence, fallback entry, and cleanup.
+
+Run `npm run test` for client regressions and `npm run build` for production
+validation. Browser tests use synthetic API fixtures: install Chromium with
+`npx playwright install chromium`, then run `npm run test:e2e`. Screenshots and
+failure traces are saved under the ignored `test-results/` directory.

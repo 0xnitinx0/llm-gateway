@@ -146,6 +146,21 @@ class TournamentService:
 
         return selected[:3]
 
+    def readiness(self) -> dict:
+        """Configuration only: no inference, credit checks, or credentials exposed."""
+        try:
+            configured = self._configured_candidates()
+            reason = None
+            if len(configured) < 2:
+                reason = "Configure at least two cloud candidate providers."
+            elif self.judge_name != "auto" and self.judge_name not in CLOUD_PROVIDERS:
+                reason = "Tournament judge must be a cloud provider; set JUDGE_PROVIDER=auto."
+            return {"ready": reason is None, "candidates": [name for name, _ in configured],
+                    "judge": self.judge_name, "reason": reason, "inference_verified": False}
+        except RuntimeError as exc:
+            return {"ready": False, "candidates": [], "judge": self.judge_name,
+                    "reason": str(exc), "inference_verified": False}
+
     async def run(
         self,
         messages: list[dict[str, str]],

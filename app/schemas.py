@@ -37,6 +37,12 @@ class CompressionMetrics(BaseModel):
     reduction_percent: float
 
 
+class RoutingMetadata(BaseModel):
+    status: Literal["routed", "skipped"]
+    classification: dict[str, Any] | None = None
+    provider_preference_order: list[str] = Field(default_factory=list)
+
+
 class GatewayMetadata(BaseModel):
     request_id: str
     provider: str
@@ -46,6 +52,7 @@ class GatewayMetadata(BaseModel):
     llm_called: bool
     latency_ms: float
     compression: CompressionMetrics | None = None
+    routing: RoutingMetadata | None = None
 
 
 class ChatCompletionResponse(BaseModel):

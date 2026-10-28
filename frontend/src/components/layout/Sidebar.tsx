@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { LayoutDashboard, Terminal, KeyRound, BarChart3, Database, Settings, X, Cpu, ArrowUpRight } from 'lucide-react';
+import { LayoutDashboard, Terminal, KeyRound, BarChart3, Database, Settings, X, Cpu, ArrowUpRight, Play } from 'lucide-react';
 import { StatusDot } from '../common/StatusDot';
 import { smoothTransition } from '../ui/motion';
 
@@ -17,12 +17,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen,
   const sidebarRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const navItems = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/playground', label: 'Playground', icon: Terminal },
-    { to: '/api-keys', label: 'API Keys', icon: KeyRound },
-    { to: '/usage', label: 'Usage & Savings', icon: BarChart3 },
-    { to: '/cache', label: 'Semantic Cache', icon: Database },
-    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Workspace' },
+    { to: '/demo', label: 'Guided demo', icon: Play, group: 'Workspace' },
+    { to: '/playground', label: 'Playground', icon: Terminal, group: 'Workspace' },
+    { to: '/usage', label: 'Usage & Savings', icon: BarChart3, group: 'Monitoring' },
+    { to: '/cache', label: 'Semantic Cache', icon: Database, group: 'Monitoring' },
+    { to: '/api-keys', label: 'API Keys', icon: KeyRound, group: 'Administration' },
+    { to: '/settings', label: 'Settings', icon: Settings, group: 'Administration' },
   ];
 
   useEffect(() => {
@@ -67,40 +68,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen,
       <aside
         ref={sidebarRef}
         aria-label="Main navigation"
-        className={`workspace-sidebar fixed inset-y-0 left-0 z-50 w-64 bg-[#EFE3D0] text-earth-700 flex flex-col border-r border-earth-200 ${isMobileOpen ? 'is-open' : ''}`}
+        className={`workspace-sidebar fixed inset-y-0 left-0 z-50 w-56 bg-[#EFE3D0] text-earth-700 flex flex-col border-r border-earth-200 ${isMobileOpen ? 'is-open' : ''}`}
       >
-        <div className="px-6 pt-8 pb-6 flex items-center justify-between">
+        <div className="px-4 pt-6 pb-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent-600 flex items-center justify-center text-surface shadow-sm">
+            <div className="w-9 h-9 rounded-lg bg-earth-800 flex items-center justify-center text-surface shadow-sm">
               <Cpu className="w-5 h-5" />
             </div>
             <div>
               <span className="text-base font-semibold text-earth-900 tracking-tight">LLM Gateway</span>
-              <p className="text-[11px] text-earth-500 mt-0.5">Your intelligence workspace</p>
+              <p className="text-[11px] text-earth-500 mt-0.5">Intelligence workspace</p>
             </div>
           </div>
           <button ref={closeRef} onClick={() => setIsMobileOpen(false)} aria-label="Close sidebar" className="lg:hidden p-1 text-earth-500 rounded-md hover:bg-earth-200">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-6 pt-5 pb-3 border-t border-earth-200/70">
-          <span className="text-[10px] uppercase font-semibold tracking-[0.18em] text-earth-500">Workspace</span>
-        </div>
-        <nav className="flex-1 px-3 space-y-1.5 overflow-y-auto" aria-label="Pages">
-          {navItems.map(item => {
+        <nav className="flex-1 px-3 space-y-1 overflow-y-auto border-t border-earth-200/70" aria-label="Pages">
+          {navItems.map((item, index) => {
             const Icon = item.icon;
             const active = pathname === item.to;
             return (
-              <NavLink key={item.to} to={item.to} onClick={() => setIsMobileOpen(false)} className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${active ? 'text-accent-800' : 'text-earth-600 hover:text-earth-900 hover:bg-surface/50'}`}>
-                {active && <motion.span layoutId="active-navigation" className="absolute inset-0 rounded-xl bg-surface border border-earth-200 shadow-sm" transition={reducedMotion ? { duration: 0 } : smoothTransition} />}
+              <React.Fragment key={item.to}>
+              {index === 0 || navItems[index - 1].group !== item.group ? <p className="px-3 pt-5 pb-2 text-[10px] uppercase font-semibold tracking-[0.16em] text-earth-500">{item.group}</p> : null}
+              <NavLink to={item.to} onClick={() => setIsMobileOpen(false)} className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? 'text-accent-800' : 'text-earth-600 hover:text-earth-900 hover:bg-surface/50'}`}>
+                {active && <motion.span layoutId="active-navigation" className="absolute inset-0 rounded-lg bg-surface border border-earth-200 shadow-sm" transition={reducedMotion ? { duration: 0 } : smoothTransition} />}
                 <Icon className={`relative w-[18px] h-[18px] shrink-0 ${active ? 'text-accent-600' : ''}`} />
                 <span className="relative flex-1">{item.label}</span>
                 {active && <ArrowUpRight className="relative w-3.5 h-3.5 text-accent-500" />}
               </NavLink>
+              </React.Fragment>
             );
           })}
         </nav>
-        <div className="mx-4 mb-5 mt-6 p-4 rounded-2xl border border-earth-200 bg-surface/60">
+        <div className="mx-3 mb-4 mt-4 p-3 rounded-lg border border-earth-200 bg-surface/60">
           <div className="flex items-center justify-between gap-2">
             <StatusDot status={gatewayOnline === null ? 'checking' : gatewayOnline ? 'online' : 'offline'} text={gatewayOnline === null ? 'Checking...' : gatewayOnline ? 'Gateway Online' : 'Gateway Offline'} />
             <span className="text-[10px] font-mono text-earth-500">v0.1.0</span>

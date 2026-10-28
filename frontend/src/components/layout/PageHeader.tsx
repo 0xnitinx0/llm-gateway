@@ -18,8 +18,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   actions,
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-canvas/95 backdrop-blur-md border-b border-earth-200/80 px-4 sm:px-8 py-5 sm:py-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <header className="sticky top-0 z-30 bg-canvas/95 backdrop-blur-md border-b border-earth-200/80 px-4 sm:px-8 py-4 sm:py-5">
+      <div className="max-w-[1376px] mx-auto flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {onOpenMobileSidebar && (
             <button

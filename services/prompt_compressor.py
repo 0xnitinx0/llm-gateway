@@ -100,9 +100,11 @@ class PromptCompressor:
         seen: set[str] = set()
         retained: list[int] = []
         edits: list[tuple[int, int, str]] = []
+        
         for index, (match, sentence) in enumerate(zip(matches, cleaned)):
             fingerprint = re.sub(r"\s+", " ", sentence.strip())
             duplicate = fingerprint in seen
+            
             if not duplicate and matrix is not None:
                 words = self._content_words(sentence)
                 markers = self.MARKERS.findall(sentence.casefold())
@@ -113,6 +115,7 @@ class PromptCompressor:
                     and words == self._content_words(cleaned[other])
                     for other in retained
                 )
+            
             if not fingerprint or duplicate:
                 edits.append((match.start(), match.end(), ""))
             else:
@@ -120,6 +123,7 @@ class PromptCompressor:
                 retained.append(index)
                 if sentence != match.group():
                     edits.append((match.start(), match.end(), sentence))
+        
         for start, end, replacement in reversed(edits):
             text = text[:start] + replacement + text[end:]
         return text

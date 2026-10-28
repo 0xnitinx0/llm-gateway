@@ -58,7 +58,10 @@ async def test_router_still_fails_over_in_order():
     providers["gemini"].generate = AsyncMock(side_effect=RuntimeError("unavailable"))
     providers["groq"].generate = AsyncMock(return_value=ProviderResult("ok", ProviderUsage(), "groq", "fake"))
     router = ModelRouter(providers)
+    decision = router.plan("", [{"role": "user", "content": "Solve this equation."}])
     result = await router.execute([{"role": "user", "content": "Solve this equation."}],
-                                  prompt="", temperature=0.7, max_tokens=None)
+                                  prompt="", temperature=0.7, max_tokens=None, routing=decision)
     assert result.provider == "groq"
     assert providers["gemini"].generate.await_count == 1
+    assert decision["classification"]["task_type"] == "reasoning"
+    assert decision["provider_preference_order"] == ["gemini", "groq"]

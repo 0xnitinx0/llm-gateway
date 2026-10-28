@@ -1,49 +1,23 @@
-import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Database, Eye, EyeOff, RefreshCw, Server, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
-import { StatusDot } from '../components/common/StatusDot';
-import { ApiError, RuntimeConfig } from '../types/gateway';
-import { checkGatewayHealth } from '../services/gateway';
-import { getAdminApiKey, setAdminApiKey } from '../services/api';
-import { getRuntimeConfig } from '../services/metrics';
+import { ConnectionPanel } from '../components/features/ConnectionPanel';
+import { useWorkspace } from '../state/WorkspaceSession';
 
-export const SettingsPage: React.FC = () => {
-  const { setIsMobileOpen, gatewayOnline: initialOnline } = useOutletContext<any>();
-  const [adminKey, setKey] = useState(getAdminApiKey() ?? '');
-  const [showKey, setShowKey] = useState(false);
-  const [config, setConfig] = useState<RuntimeConfig | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [online, setOnline] = useState<boolean | null>(initialOnline);
-  const [checking, setChecking] = useState(false);
-
-  const loadConfig = () => { setError(null); getRuntimeConfig().then(setConfig).catch(setError); };
-  useEffect(() => { if (getAdminApiKey()) loadConfig(); }, []);
-  const saveAdmin = () => { setAdminApiKey(adminKey); setConfig(null); if (adminKey.trim()) setTimeout(loadConfig, 0); };
-  const test = async () => { setChecking(true); setOnline(await checkGatewayHealth()); setChecking(false); };
-
-  return <div className="space-y-6">
-    <PageHeader title="Settings" description="Connection credentials and read-only gateway runtime configuration." onOpenMobileSidebar={() => setIsMobileOpen(true)} gatewayOnline={online} />
-    <div className="px-4 sm:px-8 max-w-4xl mx-auto space-y-6">
-      <Card title={<span className="flex items-center gap-2"><Server className="w-4 h-4 text-accent-600" />Gateway Connection</span>} subtitle="Vite proxies /api requests to FastAPI on port 8000" headerAction={<Badge variant="live">Live</Badge>}>
-        <div className="flex justify-between items-center"><StatusDot status={online === null ? 'checking' : online ? 'online' : 'offline'} /><Button variant="secondary" size="sm" onClick={test} isLoading={checking} leftIcon={<RefreshCw className="w-3.5 h-3.5" />}>Test Connection</Button></div>
+export function SettingsPage() {
+  const { setIsMobileOpen } = useOutletContext<{ setIsMobileOpen: (open: boolean) => void }>();
+  const session = useWorkspace();
+  const config = session.config;
+  return <div className="space-y-6"><PageHeader title="Settings" description="Shared connection credentials and read-only runtime configuration." gatewayOnline={session.online} onOpenMobileSidebar={() => setIsMobileOpen(true)} />
+    <div className="workspace-content space-y-5"><ConnectionPanel />
+      <Card title="Runtime configuration" subtitle="Environment-controlled and read-only">
+        {config ? <dl className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5 text-sm">{[['Cache threshold', config.cache_similarity_threshold], ['Embedding model', config.embedding_model], ['Embedding dimensions', config.embedding_dimensions], ['Compression target', Math.round(config.compression_target_ratio * 100) + '%'], ['Enabled providers', config.enabled_providers.join(', ')], ['Judge provider', config.judge_provider]].map(([label, value]) => <div key={label}><dt className="text-earth-500 text-xs">{label}</dt><dd className="font-mono font-semibold mt-1 break-words">{value}</dd></div>)}</dl> : <p className="text-sm text-earth-500">Save a valid admin key to load the live configuration.</p>}
       </Card>
-      <Card title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-600" />Admin Session</span>} subtitle="Used for telemetry, cache, and API-key administration; cleared when this browser session ends.">
-        <div className="space-y-3"><label className="text-xs font-semibold text-earth-700">Admin key</label><div className="flex flex-col sm:flex-row gap-2"><div className="relative flex-1 min-w-0"><input type={showKey ? 'text' : 'password'} value={adminKey} onChange={event => setKey(event.target.value)} className="w-full px-3 py-2 pr-10 border rounded-md font-mono text-sm" autoComplete="off" /><button type="button" aria-label={showKey ? 'Hide admin key' : 'Show admin key'} onClick={() => setShowKey(!showKey)} className="absolute right-3 top-2.5 text-earth-500">{showKey ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}</button></div><Button variant="primary" size="sm" onClick={saveAdmin}>Save for session</Button></div>{error && <p className="text-xs text-red-600">{error.detail}</p>}</div>
+      <Card title="Provider configuration" subtitle="Availability indicates configuration, not verified credit or inference">
+        {config?.provider_availability?.length ? <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">{config.provider_availability.map(provider => <div key={provider.name} className="border p-4 rounded-lg"><p className="font-semibold text-sm">{provider.name}</p><p className="text-xs text-earth-500 mt-1 break-words">{provider.model}</p><p className="text-xs mt-3">{provider.available ? provider.kind === 'local' ? 'Available · simulated inference' : 'Configured' : 'Unavailable'}</p></div>)}</div> : <p className="text-sm text-earth-500">Provider availability is unavailable.</p>}
+        <p className="text-sm mt-4">Tournament: {config?.tournament_readiness?.ready ? 'Configured · ' + config.tournament_readiness.candidates.join(', ') : config?.tournament_readiness?.reason ?? 'Readiness unavailable'}</p>
       </Card>
-      <Card title={<span className="flex items-center gap-2"><Database className="w-4 h-4 text-clay-600" />Runtime Configuration</span>} subtitle="Environment-controlled and intentionally read-only">
-        {config ? <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-          <div><dt className="text-earth-500">Cache threshold</dt><dd className="font-mono font-semibold">{config.cache_similarity_threshold}</dd></div>
-          <div><dt className="text-earth-500">Embedding model</dt><dd className="font-mono font-semibold break-all">{config.embedding_model}</dd></div>
-          <div><dt className="text-earth-500">Embedding dimensions</dt><dd className="font-mono font-semibold">{config.embedding_dimensions}</dd></div>
-          <div><dt className="text-earth-500">Compression target</dt><dd className="font-mono font-semibold">{Math.round(config.compression_target_ratio * 100)}%</dd></div>
-          <div><dt className="text-earth-500">Enabled providers</dt><dd className="font-mono font-semibold">{config.enabled_providers.join(', ')}</dd></div>
-          <div><dt className="text-earth-500">Judge provider</dt><dd className="font-mono font-semibold">{config.judge_provider}</dd></div>
-        </dl> : <p className="text-sm text-earth-500">Save a valid admin key to load the live configuration.</p>}
-      </Card>
+      <Card title="Credential storage"><p className="text-sm leading-6 text-earth-600">Admin credentials and dedicated demo secrets stay in browser session storage. Your selected gateway key is saved locally for the Playground. Provider credentials stay on the backend. Revoke dedicated session keys in API Keys after presenting.</p></Card>
     </div>
   </div>;
-};
+}

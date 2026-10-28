@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useTelemetry, WorkspaceOutletContext } from '../state/WorkspaceSession';
 import { useOutletContext } from 'react-router-dom';
 import { Minimize2, ShieldCheck, Trophy } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -7,18 +8,15 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { AdminNotice } from '../components/common/AdminNotice';
 import { TokenUsageComparisonChart } from '../components/charts/TokenUsageComparisonChart';
-import { ApiError, BackendUsageResponse } from '../types/gateway';
-import { getUsageSnapshot, mapCompression, mapTournament, mapUsage } from '../services/metrics';
+import { mapCompression, mapTournament, mapUsage } from '../services/metrics';
 
 const formatUsd = (value: number): string => new Intl.NumberFormat('en-US', {
   style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 8,
 }).format(value);
 
 export const UsagePage: React.FC = () => {
-  const { setIsMobileOpen, gatewayOnline } = useOutletContext<any>();
-  const [data, setData] = useState<BackendUsageResponse | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  useEffect(() => { getUsageSnapshot().then(setData).catch(setError); }, []);
+  const { setIsMobileOpen, gatewayOnline } = useOutletContext<WorkspaceOutletContext>();
+  const { data, error } = useTelemetry();
   const usage = data ? mapUsage(data) : null;
   const compression = data ? mapCompression(data) : null;
   const tournament = data ? mapTournament(data) : null;
@@ -27,8 +25,8 @@ export const UsagePage: React.FC = () => {
   const hasPricedRequests = Boolean(costs?.priced_requests);
   return <div className="space-y-6">
     <PageHeader title="Usage & Efficiency" description="Measured request, token, compression, and tournament behavior." onOpenMobileSidebar={() => setIsMobileOpen(true)} gatewayOnline={gatewayOnline} />
-    <div className="px-4 sm:px-8 max-w-7xl mx-auto space-y-6">
-      {error ? <AdminNotice message={error.detail} /> : <>
+    <div className="workspace-content space-y-6">
+      {error ? <AdminNotice message={error.detail} status={error.status} /> : <>
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-5 gap-4">
           <MetricCard label="Total Requests" value={usage ? usage.totalRequests.toLocaleString() : '...'} sublabel="Persisted events" badgeVariant="live" badgeText="Live" />
           <MetricCard label="Provider Calls" value={usage ? usage.llmCalls.toLocaleString() : '...'} sublabel="Logical model calls" badgeVariant="live" badgeText="Live" />

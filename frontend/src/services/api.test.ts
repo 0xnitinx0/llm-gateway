@@ -32,7 +32,7 @@ describe('apiRequest', () => {
 
   it('attaches the admin header', async () => {
     const fetchMock = vi.fn(async (_url: string, options: RequestInit) => {
-      expect((options.headers as Record<string, string>)['X-Admin-Key']).toBe('admin-test');
+      expect(new Headers(options.headers).get('X-Admin-Key')).toBe('admin-test');
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
     vi.stubGlobal('fetch', fetchMock);

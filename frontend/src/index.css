@@ -35,7 +35,7 @@
   }
 
   input:not([type='checkbox']):not([type='radio']), textarea, select {
-    @apply bg-surface border-earth-300 text-earth-800 rounded-lg;
+    @apply bg-surface border-earth-300 text-earth-800 rounded-lg font-normal;
     transition: border-color 160ms ease, box-shadow 160ms ease;
   }
 
@@ -63,16 +63,11 @@
   }
 
   .gateway-card {
-    @apply bg-surface rounded-2xl border border-earth-200 shadow-warm;
+    @apply bg-surface rounded-lg border border-earth-200;
   }
 
   .metric-card {
     @apply gateway-card p-4 sm:p-5;
-  }
-
-  .metric-card:first-child {
-    background-color: #FAE1CE;
-    border-color: #E9B99A;
   }
 
   .gateway-button {
@@ -116,3 +111,28 @@
   }
   .gateway-button:not(:disabled):active { transform: none; }
 }
+
+@layer components {
+  .workspace-content { @apply px-4 sm:px-8 mx-auto w-full max-w-[1440px]; }
+  .eyebrow { @apply text-[10px] uppercase tracking-[0.16em] font-semibold text-earth-500; }
+  .evidence-stat { @apply bg-surface border rounded-lg p-3; }
+  .evidence-stat span { @apply block text-[11px] text-earth-500; }
+  .evidence-stat strong { @apply block text-2xl font-semibold text-earth-900 mt-2 tabular-nums; }
+  .sample-notice { @apply border border-ochre-300 bg-ochre-50 rounded-lg px-4 py-3 text-sm text-earth-700; }
+}
+.demo-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+.demo-steps ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 768px) {
+  .demo-grid { grid-template-columns: 180px minmax(0, 1fr); }
+  .demo-steps { position: sticky; top: 112px; align-self: start; }
+  .demo-steps ol { display: block; }
+  .demo-evidence { grid-column: 2; }
+}
+@media (min-width: 1440px) {
+  .demo-grid { grid-template-columns: 180px minmax(0, 1fr) 230px; }
+  .demo-evidence { grid-column: auto; position: sticky; top: 112px; align-self: start; }
+}
+@keyframes result-reveal { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.result-reveal { animation: result-reveal 180ms ease-out; }
+
+details[open] > div { animation: result-reveal 180ms ease-out; }

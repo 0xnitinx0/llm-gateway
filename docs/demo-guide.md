@@ -1,5 +1,8 @@
 # Demo Narration Guide
 
+For the frontend walkthrough and a timed presentation sequence, use the
+[presenter checklist](presenter-checklist.md) and open **Start demo** in the workspace.
+
 ## 1. Edge gateway
 
 The API key is hashed in PostgreSQL, while an atomic Redis Lua script refills and
@@ -17,7 +20,7 @@ key and contain no raw prompt.
 
 ## 3. Prompt compression
 
-Compression runs only after a cache miss. It removes filler and repeated
+Compressed prompts are forwarded only after a cache miss. The compressor removes filler and repeated
 sentences while protecting code, numbers, negations, and explicit formatting
 constraints. Both token counts use the same local tokenizer, so the displayed
 reduction is consistent and inspectable.

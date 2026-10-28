@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type BadgeVariant = 'live' | 'demo' | 'preview' | 'planned' | 'hit' | 'miss' | 'neutral' | 'success';
+export type BadgeVariant = 'live' | 'demo' | 'preview' | 'planned' | 'hit' | 'miss' | 'neutral' | 'success' | 'warning' | 'error';
 
 interface BadgeProps {
   variant: BadgeVariant;
@@ -18,6 +18,8 @@ export const Badge: React.FC<BadgeProps> = ({
   const sizeClasses = size === 'sm' ? 'text-[10px] px-2 py-0.5 font-semibold tracking-wider' : 'text-xs px-2.5 py-1 font-medium';
 
   const variantStyles: Record<BadgeVariant, { bg: string; text: string; border: string; defaultLabel: string }> = {
+    warning: { bg: 'bg-ochre-50', text: 'text-ochre-700', border: 'border-ochre-200', defaultLabel: 'Attention' },
+    error: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', defaultLabel: 'Error' },
     live: {
       bg: 'bg-emerald-500/10',
       text: 'text-emerald-700',

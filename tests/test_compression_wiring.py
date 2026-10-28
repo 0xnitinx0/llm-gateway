@@ -89,8 +89,57 @@ def test_chat_routes_original_but_forwards_compressed(gateway, stream):
         final = chunks[-1]
         assert final["choices"][0]["finish_reason"] == "stop"
         assert final["gateway"]["compression"]["strategy"] == settings.compression_strategy
+        metadata = final["gateway"]
     else:
         assert response.json()["gateway"]["compression"]["strategy"] == settings.compression_strategy
+        metadata = response.json()["gateway"]
+    assert classifier.call_count == 1
+    assert metadata["routing"]["status"] == "routed"
+    assert metadata["routing"]["classification"]["task_type"] == "reasoning"
+    assert metadata["routing"]["provider_preference_order"] == ["local"]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_cache_hits_skip_routing(gateway, stream):
+    client, app, _, local, _ = gateway
+    app.state.cache.lookup.return_value = CacheLookup(True, 1.0, SimpleNamespace(
+        provider="cached-provider", model="cached-model", response="Stored answer.", completion_tokens=3,
+    ))
+    response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hello"}], "stream": stream})
+    assert response.status_code == 200
+    if stream:
+        chunks = [json.loads(line[6:]) for line in response.text.splitlines()
+                  if line.startswith("data: ") and line != "data: [DONE]"]
+        metadata = chunks[-1]["gateway"]
+    else:
+        metadata = response.json()["gateway"]
+    assert metadata["routing"] == {"status": "skipped", "classification": None, "provider_preference_order": []}
+    assert metadata["llm_called"] is False
+    local.generate.assert_not_called()
+    app.state.router.classifier.classify.assert_not_called()
+
+
+def test_admin_config_exposes_configuration_without_credentials(gateway):
+    client, _, settings, local, clouds = gateway
+    assert client.get("/v1/admin/config").status_code == 401
+    config = client.get("/v1/admin/config", headers={"X-Admin-Key": settings.admin_api_key}).json()
+    providers = {item["name"]: item for item in config["provider_availability"]}
+    assert providers["local"] == {"name": "local", "model": "local-fake-balanced", "available": True, "kind": "local"}
+    assert providers["gemini"]["available"] is True
+    assert providers["groq"]["kind"] == "cloud"
+    assert config["tournament_readiness"] == {"ready": True, "candidates": ["gemini", "groq"], "judge": "auto", "reason": None, "inference_verified": False}
+    assert settings.admin_api_key not in json.dumps(config)
+    local.generate.assert_not_called()
+    for provider in clouds.values():
+        provider.generate.assert_not_called()
+
+
+def test_streaming_without_providers_returns_a_structured_failure(gateway):
+    client, app, _, _, _ = gateway
+    app.state.router = ModelRouter({})
+    response = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hello"}], "stream": True})
+    assert response.status_code == 502
+    assert response.json()["error"]["message"] == "No provider is available"
 
 
 def test_tournament_candidates_compressed_judge_sees_original(gateway):

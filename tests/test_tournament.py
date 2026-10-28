@@ -107,3 +107,23 @@ async def test_tournament_retries_transient_cloud_error():
     assert outcome.candidates[0].attempts == 2
     assert outcome.candidates[0].error is None
     assert providers["gemini"].calls >= 2
+
+
+@pytest.mark.parametrize(
+    "candidates,judge,available,ready",
+    [
+        (["auto"], "auto", ["gemini", "groq"], True),
+        (["auto"], "auto", ["groq"], False),
+        (["groq", "groq"], "auto", ["groq", "gemini"], False),
+        (["local"], "auto", ["groq", "gemini"], False),
+        (["auto"], "local-judge", ["groq", "gemini"], False),
+        (["groq", "gemini"], "cerebras", ["groq", "gemini"], True),
+    ],
+)
+def test_readiness_uses_candidate_and_judge_rules_without_inference(candidates, judge, available, ready):
+    providers = {name: FakeCloudProvider(name) for name in available}
+    result = TournamentService(providers, candidates, judge).readiness()
+    assert result["ready"] is ready
+    assert result["inference_verified"] is False
+    assert bool(result["reason"]) is (not ready)
+    assert all(provider.calls == 0 for provider in providers.values())

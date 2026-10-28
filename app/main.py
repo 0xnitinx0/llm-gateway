@@ -54,7 +54,7 @@ from services.provider_registry import build_provider_registry
 from services.request_logging import emit_request_log, persist_request_log
 from services.routing.router import ModelRouter
 from services.semantic_cache import PgVectorSemanticCache
-from services.tournament_service import TournamentService
+from services.tournament_service import CLOUD_PROVIDERS, TournamentService
 
 configure_logging()
 logger = structlog.get_logger("llm_gateway")
@@ -97,6 +97,7 @@ def _chat_response(
     llm_called: bool,
     latency_ms: float,
     compression: CompressionMetrics | None,
+    routing: dict | None = None,
 ) -> ChatCompletionResponse:
     return ChatCompletionResponse(
         id=completion_id,
@@ -119,6 +120,7 @@ def _chat_response(
             llm_called=llm_called,
             latency_ms=round(latency_ms, 2),
             compression=compression,
+            routing=routing,
         ),
     )
 
@@ -246,6 +248,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         compressed, stats = app.state.compressor.compress(payload.messages)
         metrics = _compression_metrics(stats)
+        routing = (
+            {"status": "skipped", "classification": None, "provider_preference_order": []}
+            if lookup.hit
+            else app.state.router.plan(canonical, compressed, original_messages=payload.messages)
+        )
 
         if payload.stream:
             if lookup.hit and lookup.entry:
@@ -255,7 +262,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 stream_provider = None
                 prompt_tokens = stats.original_tokens
             else:
-                stream_provider = app.state.router.streaming_provider(canonical, compressed, original_messages=payload.messages)
+                try:
+                    stream_provider = app.state.router.streaming_provider(
+                        canonical, compressed, original_messages=payload.messages, routing=routing,
+                    )
+                except RuntimeError as exc:
+                    raise HTTPException(502, str(exc)) from exc
                 provider = stream_provider.name
                 model = stream_provider.model_name
                 source_text = None
@@ -321,6 +333,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         llm_called=not lookup.hit,
                         latency_ms=round(latency_ms, 2),
                         compression=None if lookup.hit else metrics,
+                        routing=routing,
                     )
                     final = {
                         "id": completion_id,
@@ -399,6 +412,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     original_messages=payload.messages,
                     temperature=payload.temperature,
                     max_tokens=payload.max_tokens,
+                    routing=routing,
                 )
             except RuntimeError as exc:
                 raise HTTPException(502, str(exc)) from exc
@@ -462,6 +476,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             llm_called=llm_called,
             latency_ms=latency_ms,
             compression=compression,
+            routing=routing,
         )
 
     @app.post("/v1/tools/compress", response_model=CompressionResponse)
@@ -613,6 +628,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "enabled_providers": settings.enabled_provider_names,
             "tournament_providers": settings.tournament_provider_names,
             "judge_provider": settings.judge_provider,
+            "provider_availability": [
+                {"name": name, "model": provider.model_name, "available": provider.is_available(),
+                 "kind": "local" if name.startswith("local") else "cloud"}
+                for name, provider in {**app.state.tournament.providers, **app.state.router.providers}.items()
+                if name in app.state.router.providers or name in CLOUD_PROVIDERS
+            ],
+            "tournament_readiness": app.state.tournament.readiness(),
         }
 
     @app.get("/usage", dependencies=[Depends(require_admin)])

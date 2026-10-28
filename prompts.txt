@@ -1,0 +1,45 @@
+compression - 
+
+Could you please explain semantic caching to a backend engineer in four sentences. Explain semantic caching to a backend engineer in four sentences. Please describe how embeddings and cosine similarity identify related requests. Describe how embeddings and cosine similarity identify related requests. Please explain that a cache hit reuses a stored answer and avoids another provider call. Please explain that a cache miss continues to the provider. Mention that similar wording does not always mean the same intent. Thank you.
+
+Cache - 
+
+In four sentences for a backend engineer, describe how semantic caching uses embeddings and cosine similarity to match related requests. Cover reusing a stored answer without another provider call, forwarding misses to a provider, and why similar wording can still express different intentions.
+
+streaming - 
+
+Write a Python class named TokenBucket that implements a rate limiter using time.monotonic(). It must accept capacity and refill_rate parameters, refill lazily, and expose allow_request() returning a boolean. Include three unit tests covering initial capacity, rejection when exhausted, and acceptance after refill. Explain how the implementation avoids exceeding capacity. Keep the implementation compact.
+
+
+
+full - 
+
+ Could you please help me implement a production-oriented token bucket rate limiter in Python. Help me implement a production-oriented token bucket rate limiter in Python. Please make the implementation understandable to a backend engineer reviewing it for the first time. Make the implementation understandable to a backend engineer reviewing it for the first time.
+
+Build a TokenBucket class that accepts capacity and refill_rate, where refill_rate represents tokens added per second. The bucket starts full. Each accepted request consumes one token. Rejected requests must not consume tokens. Refill lazily when a request arrives, and never allow the token count to exceed capacity. Use a monotonic clock rather than wall-clock time.
+
+Expose an allow_request method that returns whether the request is accepted, the remaining whole-token capacity, and the number of seconds until another request could be accepted. Accept an injectable clock so tests can advance time without sleeping. Validate that capacity is a positive integer and refill_rate is positive. Explain how concurrent access could produce incorrect results and protect the state with an appropriate lock.
+
+Use a capacity of three tokens and a refill rate of 0.2 tokens per second for your example. Show what happens when four requests arrive at the same instant, followed by another request five seconds later. Clearly distinguish this hypothetical example from measurements of the gateway running this prompt.
+
+Include deterministic unit tests for initial capacity, exhaustion, partial refill, full refill, capacity capping, invalid configuration, and rejected requests preserving the bucket state.
+
+Present the implementation first, then the tests, then a concise explanation. Finish by explaining why an in-process limiter does not enforce a shared limit across multiple application workers and what an atomic Redis implementation would need to do. Do not claim that you executed the tests. Thank you. Thanks in advance.
+
+2. Reasoning, tournament, and cache comparison — run in Tournament to compare answers, or Chat for reasoning and streaming. Repeat the identical Chat request to observe the actual cache outcome.
+
+Could you please evaluate the architecture of an LLM gateway that supports prompt compression, semantic caching, provider routing, streaming responses, and multi-provider answer tournaments. Evaluate the architecture of an LLM gateway that supports prompt compression, semantic caching, provider routing, streaming responses, and multi-provider answer tournaments.
+
+Consider a fictional company with three workloads. The first answers public product FAQs using documentation that changes weekly. The second helps engineers understand source code and debug failures, sometimes involving proprietary snippets. The third answers authenticated questions about individual customers' current account balances and recent transactions.
+
+The company wants to reduce provider spending and response latency while preserving correctness, privacy, and a clear audit trail. No measured traffic distribution, provider prices, cache hit rates, or latency benchmarks are available. State assumptions explicitly and do not invent measurements.
+
+Compare exact-match caching, semantic caching, and bypassing the cache for each workload. Explain how tenant identity, authorization, document version, conversation context, and freshness requirements should affect cache eligibility and cache keys. Include a concrete example of two similarly worded questions that must not share an answer.
+
+Evaluate what prompt compression may safely remove and what it must preserve, including negation, numeric constraints, identifiers, quoted text, and code. Explain why fewer input tokens do not automatically guarantee a better or cheaper answer.
+
+Recommend routing policies for simple questions, coding tasks, and reasoning tasks. Discuss provider failures, fallback behavior, and the evidence needed to explain the actual routing decision. Explain how a streaming interface should represent cancellation, partial output, and errors after some text has already arrived.
+
+Assess when a tournament is worth its additional candidate and judge calls. Propose a judging rubric covering correctness, instruction adherence, clarity, and unsupported claims. Explain how failed candidates and an unreliable judge should affect the result.
+
+Return a workload comparison table, a recommended request flow, five realistic failure scenarios with mitigations, and a short rollout checklist. Finish with the measurements you would collect before claiming cost or latency improvements. Please keep recommendations concrete and distinguish proposed policies from verified capabilities of the running gateway
