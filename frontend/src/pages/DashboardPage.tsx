@@ -1,352 +1,50 @@
-import React, { useEffect, useState } from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
+import { Activity, ArrowRight, Minimize2, Play, Zap } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { MetricCard } from '../components/ui/MetricCard';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { ConnectionPanel } from '../components/features/ConnectionPanel';
 import { RequestOverviewChart } from '../components/charts/RequestOverviewChart';
-import { CacheDonutChart } from '../components/charts/CacheDonutChart';
-import {
-  getDashboardMetrics,
-  getRequestOverviewData,
-  getCacheBreakdown,
-  getRecentActivity,
-} from '../../src/services/metrics';
-import {
-  DashboardMetrics,
-  RequestDataPoint,
-  CacheBreakdown,
-  ActivityLogItem,
-} from '../types/gateway';
-import {
-  Terminal,
-  Activity,
-  Database,
-  Minimize2,
-  Trophy,
-  Zap,
-  TrendingUp,
-  Clock,
-  Sparkles,
-  ArrowRight,
-} from 'lucide-react';
-
-interface OutletContextType {
-  setIsMobileOpen: (open: boolean) => void;
-  gatewayOnline: boolean | null;
-}
-
-export const DashboardPage: React.FC = () => {
-  const { setIsMobileOpen, gatewayOnline } = useOutletContext<OutletContextType>();
-
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [chartData, setChartData] = useState<RequestDataPoint[]>([]);
-  const [cacheData, setCacheData] = useState<CacheBreakdown | null>(null);
-  const [activity, setActivity] = useState<ActivityLogItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      try {
-        const [m, c, cb, a] = await Promise.all([
-          getDashboardMetrics(),
-          getRequestOverviewData(),
-          getCacheBreakdown(),
-          getRecentActivity(),
-        ]);
-        if (isMounted) {
-          setMetrics(m);
-          setChartData(c);
-          setCacheData(cb);
-          setActivity(a);
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Dashboard"
-        description="Monitor gateway performance and optimization impact across all connected LLM workloads."
-        onOpenMobileSidebar={() => setIsMobileOpen(true)}
-        gatewayOnline={gatewayOnline}
-        actions={
-          <Link to="/playground">
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Terminal className="w-3.5 h-3.5" />}
-            >
-              Open Playground
-            </Button>
-          </Link>
-        }
-      />
-
-      <div className="px-4 sm:px-8 max-w-7xl mx-auto space-y-6">
-        {/* Architectural Concept Banner */}
-        <div className="rounded-lg bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 p-5 text-white shadow-md">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-                  Intelligent Architecture
-                </span>
-                <Badge variant="live">Live Telemetry</Badge>
-              </div>
-              <h2 className="text-base sm:text-lg font-bold tracking-tight">
-                One Gateway. Three Pillars of Intelligent Optimization.
-              </h2>
-              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                Developers send prompts to a single endpoint. The Gateway handles Semantic Deduplication, Adaptive Prompt Compression, and Multi-Model Response Tournaments transparently.
-              </p>
-            </div>
-            <Link to="/playground" className="shrink-0">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="bg-white/10 hover:bg-white/20 text-white border-white/20"
-                rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-              >
-                Test Live Endpoint
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* Top-Level KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <MetricCard
-            label="Total Requests"
-            value={isLoading ? '...' : metrics?.totalRequests !== undefined ? metrics.totalRequests.toLocaleString() : '0'}
-            sublabel="Through gateway proxy"
-            badgeVariant="live"
-            badgeText="Live"
-            icon={<Activity className="w-4 h-4" />}
-          />
-          <MetricCard
-            label="Cache Hit Rate"
-            value={isLoading ? '...' : `${metrics?.cacheHitRate ?? 0}%`}
-            sublabel="Vector similarity >= 0.75"
-            badgeVariant="live"
-            badgeText="Live"
-            icon={<Zap className="w-4 h-4 text-emerald-500" />}
-          />
-          <MetricCard
-            label="Tokens Saved"
-            value={isLoading ? '...' : metrics?.tokensSaved !== null && metrics?.tokensSaved !== undefined ? metrics.tokensSaved.toLocaleString() : 'N/A'}
-            sublabel="Deduplication + compression"
-            badgeVariant="live"
-            badgeText="Live"
-            icon={<Minimize2 className="w-4 h-4 text-blue-500" />}
-          />
-          <MetricCard
-            label="Est. Savings"
-            value={isLoading ? '...' : metrics?.estimatedSavings !== null && metrics?.estimatedSavings !== undefined ? `$${metrics.estimatedSavings.toFixed(2)}` : 'N/A'}
-            sublabel="Provider cost avoided"
-            badgeVariant="live"
-            badgeText="Live"
-            icon={<TrendingUp className="w-4 h-4 text-emerald-500" />}
-          />
-          <MetricCard
-            label="Avg. Latency"
-            value={isLoading ? '...' : metrics?.averageLatencySec !== null && metrics?.averageLatencySec !== undefined ? `${metrics.averageLatencySec}s` : 'N/A'}
-            sublabel="Combined cache & LLM"
-            badgeVariant="live"
-            badgeText="Live"
-            icon={<Clock className="w-4 h-4 text-amber-500" />}
-          />
-        </div>
-
-        {/* Request Overview Chart */}
-        <Card
-          title="Request Overview"
-          subtitle="Daily requests handled by the gateway"
-          headerAction={<Badge variant="live">Live Data</Badge>}
-        >
-          <RequestOverviewChart data={chartData} />
-        </Card>
-
-        {/* Middle Section: Cache Performance & Gateway Intelligence */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Cache Performance Card */}
-          <Card
-            title="Cache Performance"
-            subtitle="Semantic vector hits vs misses"
-            headerAction={<Badge variant="live">Live Metric</Badge>}
-            className="lg:col-span-1"
-          >
-            {cacheData ? (
-              <CacheDonutChart data={cacheData} />
-            ) : (
-              <div className="h-44 flex items-center justify-center text-xs text-slate-400">
-                Loading cache metrics...
-              </div>
-            )}
-          </Card>
-
-          {/* Gateway Intelligence Cards (3 Pillars) */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
-                  Gateway Intelligence
-                </h3>
-                <p className="text-xs text-slate-500">
-                  How the gateway optimizes every request
-                </p>
-              </div>
-              <Badge variant="live">Live Optimization</Badge>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Card 1: Semantic Deduplication */}
-              <div className="bg-white rounded-lg border border-slate-200/80 p-4 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <Database className="w-3.5 h-3.5" />
-                    </div>
-                    <Badge variant="live">Live</Badge>
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Semantic Deduplication
-                  </h4>
-                  <div className="mt-2.5">
-                    <span className="text-2xl font-bold text-slate-900 font-mono">{metrics?.cacheHitRate ?? 0}%</span>
-                    <p className="text-[11px] text-slate-500 font-medium">cache hit rate</p>
-                  </div>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    Avoids redundant LLM inference calls when query matches previous query embeddings.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-blue-600 font-medium">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Sub-150ms cache response</span>
-                </div>
-              </div>
-
-              {/* Card 2: Prompt Compression */}
-              <div className="bg-white rounded-lg border border-slate-200/80 p-4 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <Minimize2 className="w-3.5 h-3.5" />
-                    </div>
-                    <Badge variant="live">Live</Badge>
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Prompt Compression
-                  </h4>
-                  <div className="mt-2.5">
-                    <span className="text-2xl font-bold text-slate-900 font-mono">Active</span>
-                    <p className="text-[11px] text-slate-500 font-medium">context optimization</p>
-                  </div>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    Strips filler phrases and redundant text before forwarding prompts to provider.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Preserves 100% semantic intent</span>
-                </div>
-              </div>
-
-              {/* Card 3: Response Tournament */}
-              <div className="bg-white rounded-lg border border-slate-200/80 p-4 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="w-7 h-7 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center">
-                      <Trophy className="w-3.5 h-3.5" />
-                    </div>
-                    <Badge variant="live">Live</Badge>
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                    Response Tournament
-                  </h4>
-                  <div className="mt-2.5">
-                    <span className="text-2xl font-bold text-slate-900 font-mono">Enabled</span>
-                    <p className="text-[11px] text-slate-500 font-medium">multi-model ranking</p>
-                  </div>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                    Evaluates candidate model responses in parallel and selects top response using LLM judge.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-purple-600 font-medium">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Autonomous quality ranking</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Activity Table (No raw prompts per privacy rule!) */}
-        <Card
-          title="Recent Activity"
-          subtitle="Request identifiers and vector cache similarity (prompt contents strictly protected)"
-          headerAction={<Badge variant="live">Live Telemetry</Badge>}
-          noPadding
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-medium uppercase tracking-wider">
-                <tr>
-                  <th className="py-3 px-5">Time</th>
-                  <th className="py-3 px-5">Request ID</th>
-                  <th className="py-3 px-5">Result</th>
-                  <th className="py-3 px-5">Similarity</th>
-                  <th className="py-3 px-5 text-right">Latency</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
-                {activity.length > 0 ? (
-                  activity.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-5 text-slate-500 font-sans">{item.time}</td>
-                      <td className="py-3 px-5 font-semibold text-slate-900">
-                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/60">
-                          {item.id}
-                        </span>
-                      </td>
-                      <td className="py-3 px-5 font-sans">
-                        <Badge variant={item.result === 'HIT' ? 'hit' : 'miss'}>
-                          {item.result}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-5">
-                        {item.similarity !== null ? (
-                          <span className="text-emerald-700 font-medium">{item.similarity}</span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-5 text-right font-medium text-slate-900">
-                        {item.latency}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
-                      No activity recorded yet. Submit prompts in the Playground to see live requests.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+import { mapActivity, mapDashboard } from '../services/metrics';
+import { useTelemetry, useWorkspace } from '../state/WorkspaceSession';
+const workflow = [
+  ['01', 'Authenticate', 'Gateway key and independent rate bucket'],
+  ['02', 'Check cache', 'Compare embeddings against stored answers'],
+  ['03', 'Compress', 'Reduce the forwarded prompt on a miss'],
+  ['04', 'Route', 'Classify the request and select a provider'],
+  ['05', 'Respond', 'Stream output and record usage evidence'],
+];
+const shortcuts = [
+  { title: 'Prompt compression', text: 'Compare original and compressed text, with exact token reductions.', mode: 'compression' },
+  { title: 'Semantic cache', text: 'Inspect hits, misses, similarity, and provider calls avoided.', to: '/cache' },
+  { title: 'Routing & streaming', text: 'Send simple, coding, or reasoning prompts and inspect actual routing.', mode: 'chat' },
+  { title: 'Response tournaments', text: 'Compare cloud candidates and follow the judge’s decision.', mode: 'tournament' },
+];
+export function DashboardPage() {
+  const { setIsMobileOpen } = useOutletContext<{ setIsMobileOpen: (open: boolean) => void }>();
+  const session = useWorkspace();
+  const { data, error, loading } = useTelemetry();
+  const metrics = data ? mapDashboard(data) : null;
+  const activity = data ? mapActivity(data) : [];
+  return <div className="space-y-6">
+    <PageHeader title="Gateway workspace" description="One endpoint. Observable routing, prompt efficiency, and semantic reuse." onOpenMobileSidebar={() => setIsMobileOpen(true)} gatewayOnline={session.online} actions={<Link to="/demo"><Button size="sm" leftIcon={<Play className="w-3.5 h-3.5" />}>Start demo</Button></Link>} />
+    <div className="workspace-content space-y-6">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-4 gap-4">
+        {[{ label: 'Total requests', value: metrics?.totalRequests.toLocaleString(), note: 'Persisted gateway events', icon: Activity }, { label: 'Cache hit rate', value: metrics ? metrics.cacheHitRate + '%' : null, note: 'Successful chat lookups', icon: Zap }, { label: 'Tokens saved', value: metrics?.tokensSaved.toLocaleString(), note: 'Forwarded prompt compression', icon: Minimize2 }, { label: 'Calls avoided', value: metrics?.callsAvoided.toLocaleString(), note: 'Observed semantic cache hits', icon: Zap }].map(item => <MetricCard key={item.label} label={item.label} value={item.value ?? '—'} sublabel={item.note} badgeVariant={data ? 'live' : 'neutral'} badgeText={data ? 'Live' : loading ? 'Loading' : 'Unavailable'} icon={<item.icon className="w-4 h-4" />} />)}
       </div>
+      {error && <div className="border rounded-lg bg-surface p-4 space-y-3"><div className="flex flex-wrap justify-between gap-3"><p role="status" className="text-sm text-earth-600">{session.online === false || error.status === 0 ? 'The backend is offline. Connect it to display live metrics.' : error.status === 401 ? 'Admin access is required to display live metrics.' : error.detail}</p><Link to="/settings" className="text-xs underline">Open settings</Link></div><details><summary className="text-xs font-semibold cursor-pointer">Connection & setup</summary><div className="mt-3"><ConnectionPanel /></div></details></div>}
+      <Card title="The gateway request path" subtitle="A cache hit reuses the stored answer; a miss proceeds through compression and routing." headerAction={<Badge variant="neutral">Architecture</Badge>}>
+        <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-3">{workflow.map(([number, title, text], index) => <div key={title} className="p-4 border rounded-lg bg-earth-50 relative"><div className="flex justify-between items-center"><span className="eyebrow">{number}</span>{index < 4 && <ArrowRight className="w-4 h-4 text-earth-400" aria-hidden="true" />}</div><h3 className="text-base font-semibold mt-4 text-earth-900">{title}</h3><p className="text-xs leading-5 mt-2 text-earth-500">{text}</p></div>)}</div>
+        <div className="border rounded-lg bg-emerald-50/60 border-emerald-200 p-3 mt-3 text-xs text-emerald-800">Cache hit → reuse the stored answer → respond directly. Compression and routing are skipped.</div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-5 border-t pt-4"><p className="text-sm text-earth-600">Follow the complete path in a guided 5–7 minute technical demo.</p><Link to="/demo"><Button variant="secondary" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>Open walkthrough</Button></Link></div>
+      </Card>
+      <div className="grid xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-6">
+        <Card title="Request overview" subtitle={data ? 'Persisted events over the last seven days' : 'Live history appears when telemetry is connected'}>{data ? <RequestOverviewChart data={data.history} /> : <div className="min-h-48 flex items-center justify-center text-sm text-earth-500">{loading ? 'Loading live history…' : 'History unavailable'}</div>}</Card>
+        <Card title="Recent cache activity" subtitle="Prompt-free evidence from successful chat requests" noPadding><div className="overflow-x-auto"><table className="text-left text-xs w-full"><thead className="bg-earth-50"><tr><th className="p-4">Time / request</th><th>Outcome</th><th>Similarity</th><th className="pr-4">Latency</th></tr></thead><tbody>{activity.slice(0, 6).map(item => <tr key={item.id} className="border-t"><td className="p-4"><span>{item.time}</span><span className="block font-mono text-earth-500 mt-1" title={item.id}>{item.id.slice(0, 14)}…</span></td><td><Badge variant={item.result === 'HIT' ? 'hit' : 'miss'}>{item.result}</Badge></td><td>{item.similarity?.toFixed(4) ?? '—'}</td><td className="pr-4">{item.latency}</td></tr>)}</tbody></table></div>{!activity.length && <p className="p-6 text-sm text-earth-500">{loading ? 'Loading activity…' : data ? 'No requests recorded yet. Start in the Playground or guided demo.' : 'Activity unavailable until telemetry is connected.'}</p>}</Card>
+      </div>
+      <div><p className="eyebrow mb-3">Explore gateway capabilities</p><div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">{shortcuts.map(item => <Link key={item.title} to={item.to ?? '/playground?mode=' + item.mode} className="gateway-card p-5 hover:border-earth-400 transition-colors"><h3 className="font-semibold text-sm flex justify-between">{item.title}<ArrowRight className="w-4 h-4 text-earth-500" /></h3><p className="text-xs leading-5 text-earth-500 mt-3">{item.text}</p></Link>)}</div></div>
     </div>
-  );
-};
+  </div>;
+}

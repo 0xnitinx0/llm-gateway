@@ -1,87 +1,53 @@
-import { ApiError } from '../types/gateway';
+import { ApiError, RateObservation } from '../types/gateway';
 
-/**
- * Base URL determination:
- * In development, we use relative URL '/api' which Vite proxies to http://127.0.0.1:8000
- * In production or custom setup, VITE_API_BASE_URL can override it.
- */
-const getBaseUrl = (): string => {
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
-  if (envUrl && typeof window !== 'undefined' && window.location.origin.includes('localhost:5173')) {
-    // In local Vite dev server, use the proxy route to prevent CORS errors with backend
-    return '/api';
-  }
-  return envUrl || '/api';
+export const API_BASE_URL = '/api';
+export type AuthScope = 'none' | 'gateway' | 'admin';
+export const CREDENTIAL_EVENT = 'gateway-credentials';
+export const TELEMETRY_EVENT = 'gateway-telemetry';
+const announce = (event: string) => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(event)); };
+export const refreshTelemetry = () => announce(TELEMETRY_EVENT);
+export const getGatewayApiKey = (): string | null => localStorage.getItem('gateway_api_key');
+export const getAdminApiKey = (): string | null => sessionStorage.getItem('admin_api_key');
+export const setGatewayApiKey = (value: string): void => {
+  if (value.trim()) localStorage.setItem('gateway_api_key', value.trim());
+  else localStorage.removeItem('gateway_api_key');
+  announce(CREDENTIAL_EVENT);
 };
-
-export const API_BASE_URL = getBaseUrl();
-
-export const getGatewayApiKey = (): string | null => {
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('gateway_api_key');
-    if (stored) return stored;
-  }
-  return import.meta.env.VITE_GATEWAY_API_KEY || null;
+export const setAdminApiKey = (value: string): void => {
+  if (value.trim()) sessionStorage.setItem('admin_api_key', value.trim());
+  else sessionStorage.removeItem('admin_api_key');
+  announce(CREDENTIAL_EVENT);
 };
+export const rateObservation = (response: Response): RateObservation => {
+  const number = (name: string) => { const value = response.headers.get(name); return value === null ? null : Number(value); };
+  return { status: response.status, remaining: number('X-RateLimit-Remaining'), limit: number('X-RateLimit-Limit'), retryAfter: number('Retry-After'), observedAt: Date.now() };
+};
+export const retrySeconds = (observation: RateObservation, now = Date.now()) => Math.max(0, Math.ceil(((observation.retryAfter ?? 0) * 1000 + observation.observedAt - now) / 1000));
 
-export async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-
-  const defaultHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  const apiKey = getGatewayApiKey();
-  if (apiKey) {
-    defaultHeaders['X-Gateway-API-Key'] = apiKey;
-  }
-
+export async function apiFetch(endpoint: string, options: RequestInit = {}, auth: AuthScope = 'gateway'): Promise<Response> {
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const key = auth === 'gateway' ? getGatewayApiKey() : auth === 'admin' ? getAdminApiKey() : null;
+  if (auth === 'admin' && !key) throw { detail: 'Enter the admin key in Settings to unlock live telemetry.', status: 401 } as ApiError;
+  if (key && !headers.has(auth === 'admin' ? 'X-Admin-Key' : 'X-Gateway-API-Key')) headers.set(auth === 'admin' ? 'X-Admin-Key' : 'X-Gateway-API-Key', key);
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Request failed with status ${response.status}`;
-      try {
-        const errorData = await response.json();
-        if (errorData.detail) {
-          errorMessage = typeof errorData.detail === 'string' 
-            ? errorData.detail 
-            : JSON.stringify(errorData.detail);
-        }
-      } catch {
-        // Fallback to response status text
-        if (response.statusText) {
-          errorMessage = response.statusText;
-        }
-      }
-
-      const error: ApiError = {
-        detail: errorMessage,
-        status: response.status,
-      };
-      throw error;
-    }
-
-    return (await response.json()) as T;
-  } catch (err: unknown) {
-    if ((err as ApiError).status !== undefined) {
-      throw err;
-    }
-
-    // Network error or unreachable backend
-    const networkError: ApiError = {
-      detail: 'Unable to reach the Gateway. Check that FastAPI is running on the configured endpoint.',
-      status: 0,
-    };
-    throw networkError;
+    return await fetch(API_BASE_URL + (endpoint.startsWith('/') ? endpoint : '/' + endpoint), { ...options, headers });
+  } catch (error) {
+    if (options.signal?.aborted || (error as Error).name === 'AbortError') throw error;
+    throw { detail: 'Unable to reach the Gateway. Check that FastAPI is running on port 8000.', status: 0 } as ApiError;
   }
+}
+export async function responseError(response: Response): Promise<ApiError> {
+  let detail = 'Request failed with status ' + response.status;
+  try { const body = await response.json(); detail = body?.error?.message ?? (typeof body?.detail === 'string' ? body.detail : detail); }
+  catch { if (response.statusText) detail = response.statusText; }
+  const retryAfter = Number(response.headers.get('Retry-After')) || undefined;
+  if (response.status === 429 && retryAfter) detail += ' Retry after ' + retryAfter + ' seconds.';
+  return { detail, status: response.status, retryAfter, requestId: response.headers.get('X-Request-ID') || undefined };
+}
+export async function apiRequest<T>(endpoint: string, options: RequestInit = {}, auth: AuthScope = 'gateway'): Promise<T> {
+  const response = await apiFetch(endpoint, options, auth);
+  if (!response.ok) throw await responseError(response);
+  if (response.status === 204) return undefined as T;
+  return await response.json() as T;
 }

@@ -46,15 +46,15 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       <div className="flex items-center justify-between">
         <label
           htmlFor="gateway-prompt"
-          className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+          className="text-xs font-semibold text-earth-700 flex items-center gap-1.5"
         >
           Prompt
         </label>
         <div className="flex items-center gap-3">
-          <span className="text-[11px] text-slate-400 font-mono">
+          <span className="text-[11px] text-earth-500 font-mono">
             {prompt.length} characters
           </span>
-          <span className="hidden sm:inline-block text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+          <span className="hidden sm:inline-block text-[10px] text-earth-500 bg-earth-100 px-1.5 py-0.5 rounded border border-earth-200">
             Ctrl + Enter
           </span>
         </div>
@@ -70,15 +70,15 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
           disabled={disabled || isLoading}
           placeholder="Ask the Gateway anything..."
           rows={5}
-          className="w-full p-3.5 text-sm bg-white border border-slate-300 rounded-md text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors disabled:bg-slate-50 disabled:text-slate-500 resize-y shadow-2xs font-sans leading-relaxed"
+          className="w-full p-3.5 text-sm bg-surface border border-earth-300 rounded-md text-earth-800 placeholder-earth-500 focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-600 transition-colors disabled:bg-earth-50 disabled:text-earth-500 resize-y shadow-2xs font-sans leading-relaxed"
           spellCheck="false"
         />
       </div>
 
       {/* Suggested demo prompts pills */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <span className="text-[11px] text-slate-400 flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-amber-500" />
+        <span className="text-[11px] text-earth-500 flex items-center gap-1">
+          <Sparkles className="w-3 h-3 text-ochre-500" />
           Quick prompts:
         </span>
         {DEMO_PROMPTS.map((p, idx) => (
@@ -87,7 +87,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
             type="button"
             disabled={isLoading || disabled}
             onClick={() => setPrompt(p)}
-            className="text-[11px] text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50/70 border border-slate-200/80 rounded-full px-2.5 py-0.5 transition-colors text-left truncate max-w-xs focus:outline-none"
+            className="text-[11px] text-earth-600 hover:text-accent-600 bg-earth-100 hover:bg-accent-50/70 border border-earth-200/80 rounded-full px-2.5 py-0.5 transition-colors text-left truncate max-w-xs focus:outline-none"
             title={p}
           >
             {p}
@@ -96,9 +96,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       </div>
 
       {/* Action Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-        <div className="text-[11px] text-slate-500">
-          Gateway Router: <span className="font-mono font-medium text-slate-700">Intelligent Auto-Routing</span> (Groq / Cerebras / Gemini)
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-earth-100">
+        <div className="text-[11px] text-earth-500">
+          Gateway Router: <span className="font-mono font-medium text-earth-700">Intelligent Auto-Routing</span> (Groq / Cerebras / Gemini)
         </div>
 
         <Button

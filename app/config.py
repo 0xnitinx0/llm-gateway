@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List
+from typing import List, Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,16 +23,18 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 384
     local_token_delay_ms: int = 35
     enabled_providers: str = "local"
-    compression_min_tokens: int = 30
-    compression_target_ratio: float = 0.70
-    tournament_providers: str = "local-concise,local-analytical,local-practical"
-    judge_provider: str = "local-judge"
+    compression_strategy: Literal["basic", "conservative_tfidf"] = "conservative_tfidf"
+    compression_min_tokens: int = Field(default=30, ge=0)
+    compression_target_ratio: float = Field(default=0.70, gt=0.0, le=1.0)
+    tournament_providers: str = "auto"
+    judge_provider: str = "auto"
+    model_pricing_json: str = "{}"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3.6-flash"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-20b"
     cerebras_api_key: str = ""
-    cerebras_model: str = "llama-3.3-70b"
+    cerebras_model: str = "qwen-3.8-27b"
 
     @property
     def enabled_provider_names(self) -> List[str]:

@@ -1,61 +1,50 @@
 # LLM Gateway
 
-A local-first, backend-only LLM gateway written in Python. One FastAPI process
-contains an edge layer (authentication, Redis rate limiting, HTTP/SSE) and an
-intelligence layer (routing, pgvector deduplication, prompt compression, and
-multi-model judging). The modular-monolith boundary keeps a solo demo easy to
-trace while leaving each service replaceable.
+A local-first LLM gateway with a Python FastAPI backend and a connected React developer portal. The gateway is a modular monolith: authentication, rate limiting, routing, semantic caching, compression, tournaments, and telemetry are separate Python modules while sharing one observable process.
 
 ## Local stack
 
-- FastAPI and async SQLAlchemy
+- FastAPI, async SQLAlchemy, and Alembic
 - PostgreSQL 16 with pgvector and an HNSW cosine index
 - Redis token-bucket rate limiting implemented atomically in Lua
-- ONNX FastEmbed BGE-small embeddings, baked into the image
-- Deterministic local generation and judge profiles; Gemini, Groq, and Cerebras
-  are optional
+- Local ONNX FastEmbed embeddings
+- Deterministic local generation/judging, with optional Gemini, Groq, and Cerebras adapters
+- React/Vite portal using live, prompt-free gateway telemetry
 
-Start everything:
+Start the backend infrastructure:
 
     docker compose up --build
 
-The initial image build downloads the embedding model. Runtime requests require
-no cloud API or paid credentials. Readiness is available at
-http://localhost:8000/ready and interactive API documentation at
-http://localhost:8000/docs.
+The first image build downloads the embedding model. Runtime requests need no cloud key. FastAPI is available at http://localhost:8000 and readiness at http://localhost:8000/ready.
 
-Run the complete narrated demo from another terminal:
+Start the portal separately:
+
+    cd frontend
+    npm install
+    npm run dev
+
+Open http://localhost:5173. Vite proxies /api to FastAPI, so no browser CORS setup is required. Enter a gateway key manually in Playground. For the local seeded environment use gw_demo_local. Enter the configured admin key in Settings to unlock Dashboard, Usage, Cache, and API Keys; it is retained only in sessionStorage.
+
+## API and demo
+
+POST /v1/chat/completions accepts the OpenAI-style model, messages, temperature, max_tokens, stream, and stream_options fields. Authenticate with Authorization: Bearer or X-Gateway-API-Key. POST /v1/tournaments returns every candidate, judge scores/reasoning, and the winner. POST /v1/tools/compress exposes compression independently.
+
+Administrative APIs use X-Admin-Key:
+
+- GET /usage: request, token, cache, compression, rate-limit, and tournament telemetry
+- GET /v1/admin/config: safe read-only runtime configuration
+- GET/POST/DELETE /v1/api-keys: key lifecycle management
+- GET/DELETE /v1/admin/cache: sanitized cache metadata and reset
+
+Run the narrated CLI demonstration with:
 
     python3 -m scripts.demo all
 
-Individual stages are also available:
+## Development checks
 
-    python3 -m scripts.demo edge
-    python3 -m scripts.demo rate-limit
-    python3 -m scripts.demo cache
-    python3 -m scripts.demo compression
-    python3 -m scripts.demo tournament
-
-The seeded keys are gw_demo_local and gw_demo_rate. Admin-only endpoints use
-X-Admin-Key: admin-local-demo. Override these values for anything beyond a local
-demo.
-
-## Client API
-
-POST /v1/chat/completions accepts the standard model, messages, temperature,
-max_tokens, stream, and stream_options fields. Authenticate using either
-Authorization: Bearer GATEWAY_KEY or X-Gateway-API-Key. Non-streaming responses
-retain the standard choices and usage objects and add a gateway metadata object.
-Streaming responses use SSE chat-completion chunks and terminate with [DONE].
-
-POST /v1/tools/compress exposes compression independently. POST /v1/tournaments
-returns candidates, errors, timing, token usage, judge scores/reasoning, and the
-winner. Cache, key-management, reset, and usage endpoints require the admin key.
-
-## Development
-
-    python3 -m pip install -r requirements.txt
     pytest -q
+    cd frontend
+    npm test
+    npm run build
 
-Raw prompts and API keys are never written to logs or semantic-cache rows. Only
-key hashes, embeddings, generated responses, and operational metrics persist.
+Raw prompts and API keys are never written to telemetry or returned by admin cache endpoints. The portal intentionally reports measured efficiency instead of fabricated monetary savings for the free local provider.

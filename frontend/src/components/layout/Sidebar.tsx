@@ -1,16 +1,9 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Terminal,
-  KeyRound,
-  BarChart3,
-  Database,
-  Settings,
-  X,
-  Cpu,
-} from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { LayoutDashboard, Terminal, KeyRound, BarChart3, Database, Settings, X, Cpu, ArrowUpRight, Play } from 'lucide-react';
 import { StatusDot } from '../common/StatusDot';
+import { smoothTransition } from '../ui/motion';
 
 interface SidebarProps {
   isMobileOpen: boolean;
@@ -18,109 +11,102 @@ interface SidebarProps {
   gatewayOnline: boolean | null;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  isMobileOpen,
-  setIsMobileOpen,
-  gatewayOnline,
-}) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen, gatewayOnline }) => {
+  const { pathname } = useLocation();
+  const reducedMotion = useReducedMotion();
+  const sidebarRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const navItems = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/playground', label: 'Playground', icon: Terminal, highlight: true },
-    { to: '/api-keys', label: 'API Keys', icon: KeyRound },
-    { to: '/usage', label: 'Usage & Savings', icon: BarChart3 },
-    { to: '/cache', label: 'Semantic Cache', icon: Database },
-    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Workspace' },
+    { to: '/demo', label: 'Guided demo', icon: Play, group: 'Workspace' },
+    { to: '/playground', label: 'Playground', icon: Terminal, group: 'Workspace' },
+    { to: '/usage', label: 'Usage & Savings', icon: BarChart3, group: 'Monitoring' },
+    { to: '/cache', label: 'Semantic Cache', icon: Database, group: 'Monitoring' },
+    { to: '/api-keys', label: 'API Keys', icon: KeyRound, group: 'Administration' },
+    { to: '/settings', label: 'Settings', icon: Settings, group: 'Administration' },
   ];
+
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMobileOpen(false);
+      if (event.key !== 'Tab') return;
+      const items = sidebarRef.current?.querySelectorAll<HTMLElement>('a, button');
+      if (!items?.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    const handleResize = () => { if (window.innerWidth >= 1024) setIsMobileOpen(false); };
+    window.addEventListener('keydown', handleKey);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKey);
+      window.removeEventListener('resize', handleResize);
+      previousFocus?.focus();
+    };
+  }, [isMobileOpen, setIsMobileOpen]);
 
   return (
     <>
-      {/* Mobile Backdrop */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-sm transition-opacity"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar Container */}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: reducedMotion ? 0 : 0.2 }}
+            className="fixed inset-0 bg-earth-900/35 z-40 lg:hidden backdrop-blur-sm"
+            onClick={() => setIsMobileOpen(false)} aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-[#0d131f] text-slate-300 flex flex-col border-r border-slate-800 transition-transform duration-200 ease-in-out lg:translate-x-0 ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        ref={sidebarRef}
+        aria-label="Main navigation"
+        className={`workspace-sidebar fixed inset-y-0 left-0 z-50 w-56 bg-[#EFE3D0] text-earth-700 flex flex-col border-r border-earth-200 ${isMobileOpen ? 'is-open' : ''}`}
       >
-        {/* Header / Brand */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
+        <div className="px-4 pt-6 pb-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
-              <Cpu className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-earth-800 flex items-center justify-center text-surface shadow-sm">
+              <Cpu className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white tracking-tight">LLM Gateway</span>
-              </div>
-              <p className="text-[11px] text-slate-400 font-medium">Developer Portal</p>
+              <span className="text-base font-semibold text-earth-900 tracking-tight">LLM Gateway</span>
+              <p className="text-[11px] text-earth-500 mt-0.5">Intelligence workspace</p>
             </div>
           </div>
-          <button
-            onClick={() => setIsMobileOpen(false)}
-            className="lg:hidden p-1 text-slate-400 hover:text-white rounded-md hover:bg-slate-800"
-          >
+          <button ref={closeRef} onClick={() => setIsMobileOpen(false)} aria-label="Close sidebar" className="lg:hidden p-1 text-earth-500 rounded-md hover:bg-earth-200">
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Small positioning badge */}
-        <div className="px-5 py-2.5 bg-slate-900/40 border-b border-slate-800/40">
-          <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400">
-            Intelligent LLM Infrastructure
-          </span>
-        </div>
-
-        {/* Navigation items */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+        <nav className="flex-1 px-3 space-y-1 overflow-y-auto border-t border-earth-200/70" aria-label="Pages">
+          {navItems.map((item, index) => {
             const Icon = item.icon;
+            const active = pathname === item.to;
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={() => setIsMobileOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                  } ${item.highlight && !isMobileOpen ? 'relative' : ''}`
-                }
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="flex-1">{item.label}</span>
-                {item.highlight && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 uppercase tracking-wider">
-                    Core
-                  </span>
-                )}
+              <React.Fragment key={item.to}>
+              {index === 0 || navItems[index - 1].group !== item.group ? <p className="px-3 pt-5 pb-2 text-[10px] uppercase font-semibold tracking-[0.16em] text-earth-500">{item.group}</p> : null}
+              <NavLink to={item.to} onClick={() => setIsMobileOpen(false)} className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? 'text-accent-800' : 'text-earth-600 hover:text-earth-900 hover:bg-surface/50'}`}>
+                {active && <motion.span layoutId="active-navigation" className="absolute inset-0 rounded-lg bg-surface border border-earth-200 shadow-sm" transition={reducedMotion ? { duration: 0 } : smoothTransition} />}
+                <Icon className={`relative w-[18px] h-[18px] shrink-0 ${active ? 'text-accent-600' : ''}`} />
+                <span className="relative flex-1">{item.label}</span>
+                {active && <ArrowUpRight className="relative w-3.5 h-3.5 text-accent-500" />}
               </NavLink>
+              </React.Fragment>
             );
           })}
         </nav>
-
-        {/* Bottom Section: Health & Version */}
-        <div className="p-4 border-t border-slate-800/80 bg-[#090d16]/70 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <StatusDot
-                status={gatewayOnline === null ? 'checking' : gatewayOnline ? 'online' : 'offline'}
-                text={gatewayOnline === null ? 'Checking...' : gatewayOnline ? 'Gateway Online' : 'Gateway Offline'}
-              />
-            </div>
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700/50">
-              v0.1.0
-            </span>
+        <div className="mx-3 mb-4 mt-4 p-3 rounded-lg border border-earth-200 bg-surface/60">
+          <div className="flex items-center justify-between gap-2">
+            <StatusDot status={gatewayOnline === null ? 'checking' : gatewayOnline ? 'online' : 'offline'} text={gatewayOnline === null ? 'Checking...' : gatewayOnline ? 'Gateway Online' : 'Gateway Offline'} />
+            <span className="text-[10px] font-mono text-earth-500">v0.1.0</span>
           </div>
-          <p className="text-[10px] text-slate-400 leading-tight">
-            Single endpoint · Unified optimization
-          </p>
+          <p className="text-[11px] text-earth-500 mt-2 leading-relaxed">One endpoint. Smarter requests.</p>
         </div>
       </aside>
     </>

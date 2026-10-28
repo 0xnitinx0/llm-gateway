@@ -1,424 +1,71 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useTelemetry, WorkspaceOutletContext } from '../state/WorkspaceSession';
 import { useOutletContext } from 'react-router-dom';
+import { Minimize2, ShieldCheck, Trophy } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { MetricCard } from '../components/ui/MetricCard';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { AdminNotice } from '../components/common/AdminNotice';
 import { TokenUsageComparisonChart } from '../components/charts/TokenUsageComparisonChart';
-import {
-  getUsageMetrics,
-  getCompressionMetrics,
-  getTournamentMetrics,
-} from '../../src/services/metrics';
-import {
-  UsageMetrics,
-  CompressionMetrics,
-  TournamentMetrics,
-} from '../types/gateway';
-import {
-  Minimize2,
-  Database,
-  Trophy,
-  ArrowRight,
-  TrendingDown,
-  Layers,
-  Sparkles,
-  ShieldCheck,
-} from 'lucide-react';
+import { mapCompression, mapTournament, mapUsage } from '../services/metrics';
 
-interface OutletContextType {
-  setIsMobileOpen: (open: boolean) => void;
-  gatewayOnline: boolean | null;
-}
+const formatUsd = (value: number): string => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 8,
+}).format(value);
 
 export const UsagePage: React.FC = () => {
-  const { setIsMobileOpen, gatewayOnline } = useOutletContext<OutletContextType>();
-
-  const [usage, setUsage] = useState<UsageMetrics | null>(null);
-  const [compression, setCompression] = useState<CompressionMetrics | null>(null);
-  const [tournament, setTournament] = useState<TournamentMetrics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      try {
-        const [u, c, t] = await Promise.all([
-          getUsageMetrics(),
-          getCompressionMetrics(),
-          getTournamentMetrics(),
-        ]);
-        if (isMounted) {
-          setUsage(u);
-          setCompression(c);
-          setTournament(t);
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Usage & Savings"
-        description="Understand gateway request volume, token reduction, and financial optimization impact."
-        onOpenMobileSidebar={() => setIsMobileOpen(true)}
-        gatewayOnline={gatewayOnline}
-      />
-
-      <div className="px-4 sm:px-8 max-w-7xl mx-auto space-y-6">
-        {/* Top KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <MetricCard
-            label="Total Requests"
-            value={isLoading ? '...' : usage?.totalRequests !== undefined ? usage.totalRequests.toLocaleString() : '0'}
-            sublabel="Received by gateway"
-            badgeVariant="live"
-            badgeText="Live"
-          />
-          <MetricCard
-            label="LLM Calls"
-            value={isLoading ? '...' : usage?.llmCalls !== undefined ? usage.llmCalls.toLocaleString() : '0'}
-            sublabel="Forwarded to provider"
-            badgeVariant="live"
-            badgeText="Live"
-          />
-          <MetricCard
-            label="Cache Hits"
-            value={isLoading ? '...' : usage?.cacheHits !== undefined ? usage.cacheHits.toLocaleString() : '0'}
-            sublabel="Zero-provider calls"
-            badgeVariant="live"
-            badgeText="Live"
-          />
-          <MetricCard
-            label="Total Tokens"
-            value={isLoading ? '...' : usage?.totalTokens !== null && usage?.totalTokens !== undefined ? usage.totalTokens.toLocaleString() : 'N/A'}
-            sublabel="Captured from provider"
-            badgeVariant="live"
-            badgeText="Live"
-          />
-          <MetricCard
-            label="Estimated Cost Saved"
-            value={isLoading ? '...' : (usage?.estimatedCostSaved !== undefined && usage?.estimatedCostSaved !== null ? (usage.estimatedCostSaved < 0.01 && usage.estimatedCostSaved > 0 ? `$${usage.estimatedCostSaved.toFixed(4)}` : `$${usage.estimatedCostSaved.toFixed(2)}`) : '$0.00')}
-            sublabel="Avoided provider cost"
-            badgeVariant="live"
-            badgeText="Live"
-          />
+  const { setIsMobileOpen, gatewayOnline } = useOutletContext<WorkspaceOutletContext>();
+  const { data, error } = useTelemetry();
+  const usage = data ? mapUsage(data) : null;
+  const compression = data ? mapCompression(data) : null;
+  const tournament = data ? mapTournament(data) : null;
+  const withoutCompression = usage ? usage.totalTokens + usage.tokensSaved : 0;
+  const costs = data?.costs;
+  const hasPricedRequests = Boolean(costs?.priced_requests);
+  return <div className="space-y-6">
+    <PageHeader title="Usage & Efficiency" description="Measured request, token, compression, and tournament behavior." onOpenMobileSidebar={() => setIsMobileOpen(true)} gatewayOnline={gatewayOnline} />
+    <div className="workspace-content space-y-6">
+      {error ? <AdminNotice message={error.detail} status={error.status} /> : <>
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-5 gap-4">
+          <MetricCard label="Total Requests" value={usage ? usage.totalRequests.toLocaleString() : '...'} sublabel="Persisted events" badgeVariant="live" badgeText="Live" />
+          <MetricCard label="Provider Calls" value={usage ? usage.llmCalls.toLocaleString() : '...'} sublabel="Logical model calls" badgeVariant="live" badgeText="Live" />
+          <MetricCard label="Calls Avoided" value={usage ? usage.callsAvoided.toLocaleString() : '...'} sublabel="Semantic cache hits" badgeVariant="live" badgeText="Live" />
+          <MetricCard label="Tokens Saved" value={usage ? usage.tokensSaved.toLocaleString() : '...'} sublabel="Prompt compression" badgeVariant="live" badgeText="Live" />
+          <MetricCard label="Rate Limited" value={usage ? usage.rateLimitedRequests.toLocaleString() : '...'} sublabel="HTTP 429 responses" badgeVariant="live" badgeText="Live" />
         </div>
-
-        {/* Token Usage & Cost Comparison Grid */}
+        <Card title="Estimated USD Savings" subtitle="Compared with one direct, uncompressed call to the response model" headerAction={<Badge variant="live">Configured rates</Badge>}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded"><p className="text-xs text-emerald-700">Net saved{hasPricedRequests && costs!.net_savings_usd < 0 ? ' (extra spending)' : ''}</p><strong className="text-xl font-mono text-emerald-700">{hasPricedRequests ? formatUsd(Math.abs(costs!.net_savings_usd)) : '—'}</strong></div>
+            <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Direct baseline</p><strong className="text-xl font-mono">{hasPricedRequests ? formatUsd(costs!.baseline_spend_usd) : '—'}</strong></div>
+            <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Estimated actual</p><strong className="text-xl font-mono">{hasPricedRequests ? formatUsd(costs!.actual_spend_usd) : '—'}</strong></div>
+            <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Cache saved</p><strong className="text-lg font-mono">{hasPricedRequests ? formatUsd(costs!.cache_savings_usd) : '—'}</strong></div>
+            <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Compression saved</p><strong className="text-lg font-mono">{hasPricedRequests ? formatUsd(costs!.compression_savings_usd) : '—'}</strong></div>
+            <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Tournament overhead</p><strong className="text-lg font-mono">{hasPricedRequests ? formatUsd(costs!.tournament_overhead_usd) : '—'}</strong></div>
+          </div>
+          <p className="mt-3 text-xs text-earth-600">{costs?.configured_models === 0 ? 'Rates not configured. Set MODEL_PRICING_JSON to calculate estimates.' : `${costs?.priced_requests ?? 0} priced requests; ${costs?.unpriced_requests ?? 0} unpriced requests. Historical requests without rates are not backfilled.`}</p>
+        </Card>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Token Analytics Card */}
-          <Card
-            title="Token Usage Comparison"
-            subtitle="Comparing standard direct provider calls vs. Gateway-optimized traffic"
-            headerAction={<Badge variant="live">Live Data</Badge>}
-          >
-            <div className="space-y-4">
-              <TokenUsageComparisonChart
-                withoutGateway={usage?.totalTokens ? usage.totalTokens + (usage.totalInputTokens || 0) : 0}
-                withGateway={usage?.totalTokens || 0}
-              />
-
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                <div className="p-3 bg-slate-50 rounded-md border border-slate-100">
-                  <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                    Total Input Tokens
-                  </span>
-                  <div className="text-xl font-bold text-blue-600 font-mono mt-0.5">
-                    {usage?.totalInputTokens !== null && usage?.totalInputTokens !== undefined ? usage.totalInputTokens.toLocaleString() : 'N/A'}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Captured from provider
-                  </p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-md border border-slate-100">
-                  <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                    Total Output Tokens
-                  </span>
-                  <div className="text-xl font-bold text-emerald-600 font-mono mt-0.5">
-                    {usage?.totalOutputTokens !== null && usage?.totalOutputTokens !== undefined ? usage.totalOutputTokens.toLocaleString() : 'N/A'}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Captured from provider
-                  </p>
-                </div>
-              </div>
+          <Card title="Token Efficiency" subtitle="Recorded tokens with and without compression" headerAction={<Badge variant="live">Live Data</Badge>}><TokenUsageComparisonChart withoutGateway={withoutCompression} withGateway={usage?.totalTokens ?? 0} /></Card>
+          <Card title="Token Totals" subtitle="Provider-reported and locally counted usage">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Input</p><p className="text-2xl font-mono font-bold">{usage?.totalInputTokens.toLocaleString() ?? '...'}</p></div>
+              <div className="p-4 bg-earth-50 rounded border"><p className="text-xs text-earth-500">Output</p><p className="text-2xl font-mono font-bold">{usage?.totalOutputTokens.toLocaleString() ?? '...'}</p></div>
+              <div className="p-4 bg-accent-50 rounded border border-accent-200"><p className="text-xs text-accent-700">Total</p><p className="text-2xl font-mono font-bold text-accent-700">{usage?.totalTokens.toLocaleString() ?? '...'}</p></div>
+              <div className="p-4 bg-emerald-50 rounded border border-emerald-200"><p className="text-xs text-emerald-700">Compression saved</p><p className="text-2xl font-mono font-bold text-emerald-700">{usage?.tokensSaved.toLocaleString() ?? '...'}</p></div>
             </div>
           </Card>
-
-          {/* Cost Comparison Card */}
-          <Card
-            title="Estimated Cost Breakdown"
-            subtitle="Calculated based on standard token pricing across unified gateway workloads"
-            headerAction={<Badge variant="live">Estimated Cost</Badge>}
-          >
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-4 bg-slate-50/80 rounded-lg border border-slate-200">
-                  <span className="text-xs font-semibold text-slate-600">Without Gateway</span>
-                  <div className="text-2xl font-bold text-slate-700 font-mono mt-2">
-                    {usage?.estimatedCostWithoutGateway !== undefined && usage?.estimatedCostWithoutGateway !== null ? (usage.estimatedCostWithoutGateway < 0.01 && usage.estimatedCostWithoutGateway > 0 ? `$${usage.estimatedCostWithoutGateway.toFixed(4)}` : `$${usage.estimatedCostWithoutGateway.toFixed(2)}`) : '$0.00'}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Uncached raw token usage
-                  </p>
-                </div>
-
-                <div className="p-4 bg-blue-50/60 rounded-lg border border-blue-200/80">
-                  <span className="text-xs font-semibold text-blue-800">With Gateway</span>
-                  <div className="text-2xl font-bold text-blue-700 font-mono mt-2">
-                    {usage?.actualProviderCost !== undefined && usage?.actualProviderCost !== null ? (usage.actualProviderCost < 0.01 && usage.actualProviderCost > 0 ? `$${usage.actualProviderCost.toFixed(4)}` : `$${usage.actualProviderCost.toFixed(2)}`) : (usage?.estimatedCost !== undefined && usage?.estimatedCost !== null ? (usage.estimatedCost < 0.01 && usage.estimatedCost > 0 ? `$${usage.estimatedCost.toFixed(4)}` : `$${usage.estimatedCost.toFixed(2)}`) : '$0.00')}
-                  </div>
-                  <p className="text-[11px] text-blue-600 mt-1">
-                    Intelligently optimized
-                  </p>
-                </div>
-
-                <div className="p-4 bg-emerald-50/60 rounded-lg border border-emerald-200/80">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-emerald-800">Est. Savings</span>
-                    <TrendingDown className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-emerald-700 font-mono mt-2">
-                    {usage?.estimatedCostSaved !== undefined && usage?.estimatedCostSaved !== null ? (usage.estimatedCostSaved < 0.01 && usage.estimatedCostSaved > 0 ? `$${usage.estimatedCostSaved.toFixed(4)}` : `$${usage.estimatedCostSaved.toFixed(2)}`) : '$0.00'}
-                  </div>
-                  <p className="text-[11px] text-emerald-600 mt-1">
-                    Provider cost avoided
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-md bg-slate-50 border border-slate-100 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  <strong>Estimated Cost:</strong> Based on recorded gateway token usage and standard provider token rates, not an actual provider invoice.
-                </p>
-              </div>
-            </div>
-          </Card>
-
         </div>
-
-        {/* Optimization Sources Breakdown */}
-        <Card
-          title="Optimization Impact Breakdown"
-          subtitle="How deduplication and compression jointly eliminate redundant spend"
-          headerAction={<Badge variant="demo">Demo Breakdown</Badge>}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-lg border border-slate-200/80 bg-slate-50/50 space-y-2">
-              <div className="flex items-center gap-2 text-slate-800">
-                <Database className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-bold uppercase tracking-wider">Semantic Deduplication</span>
-              </div>
-              <div className="text-xl font-bold text-slate-900 font-mono">
-                24,120 tokens
-              </div>
-              <p className="text-xs text-slate-600">
-                Estimated savings: <strong>$7.33</strong>. Eliminates full model inference calls when previous answers match query semantics.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-lg border border-slate-200/80 bg-slate-50/50 space-y-2">
-              <div className="flex items-center gap-2 text-slate-800">
-                <Minimize2 className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-bold uppercase tracking-wider">Prompt Compression</span>
-              </div>
-              <div className="text-xl font-bold text-slate-900 font-mono">
-                18,060 tokens
-              </div>
-              <p className="text-xs text-slate-600">
-                Estimated savings: <strong>$5.51</strong>. Prunes verbose framing and extraneous tokens while retaining core instructions.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-lg border border-blue-200 bg-blue-50/30 space-y-2">
-              <div className="flex items-center gap-2 text-blue-900">
-                <Layers className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-bold uppercase tracking-wider">Total Combined Impact</span>
-              </div>
-              <div className="text-xl font-bold text-blue-700 font-mono">
-                42,180 tokens
-              </div>
-              <p className="text-xs text-blue-900">
-                Total savings: <strong>$12.84</strong>. A 33.4% net efficiency improvement across all routed traffic.
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Dedicated Section 1: Adaptive Prompt Compression UI */}
-        <Card
-          title={
-            <div className="flex items-center gap-2">
-              <Minimize2 className="w-4 h-4 text-emerald-600" />
-              <span className="text-sm font-semibold text-slate-900">Adaptive Prompt Compression</span>
-            </div>
-          }
-          subtitle="Reduce redundant context before forwarding requests to provider"
-          headerAction={<Badge variant="demo">DEMO</Badge>}
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Original Tokens</span>
-                <div className="text-xl font-bold text-slate-900 font-mono mt-1">
-                  {compression?.originalTokens || 420}
-                </div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Compressed Tokens</span>
-                <div className="text-xl font-bold text-slate-900 font-mono mt-1">
-                  {compression?.compressedTokens || 294}
-                </div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Tokens Saved</span>
-                <div className="text-xl font-bold text-emerald-600 font-mono mt-1">
-                  {compression?.tokensSaved || 126}
-                </div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Compression Ratio</span>
-                <div className="text-xl font-bold text-blue-600 font-mono mt-1">
-                  {compression?.compressionRatio || 70}%
-                </div>
-              </div>
-            </div>
-
-            {/* Before / After Visualizer */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div className="p-3.5 rounded-md border border-slate-200 bg-slate-50 text-xs font-mono text-slate-600 space-y-1.5">
-                <div className="flex items-center justify-between text-slate-400 font-sans text-[11px] font-semibold uppercase">
-                  <span>Input Prompt (Raw)</span>
-                  <span className="text-slate-500">420 tokens</span>
-                </div>
-                <p className="leading-relaxed bg-white p-2.5 rounded border border-slate-200/80">
-                  "Please act as an experienced computer scientist. Could you kindly provide me with a comprehensive, step-by-step, thorough explanation of the core principles of quantum computing specifically tailored for..."
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-md border border-emerald-200 bg-emerald-50/40 text-xs font-mono text-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between text-emerald-700 font-sans text-[11px] font-semibold uppercase">
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-emerald-600" />
-                    Compressed Prompt (Forwarded)
-                  </span>
-                  <span className="text-emerald-700 font-bold">294 tokens (-30%)</span>
-                </div>
-                <p className="leading-relaxed bg-white p-2.5 rounded border border-emerald-200/80">
-                  "Explain core principles of quantum computing step-by-step for a first-year computer science student, focusing on qubits, superposition, and entanglement."
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Dedicated Section 2: Multi-Model Response Tournament UI */}
-        <Card
-          title={
-            <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-semibold text-slate-900">Multi-Model Response Tournament</span>
-            </div>
-          }
-          subtitle="The Gateway can evaluate multiple candidate responses and autonomously select the strongest result"
-          headerAction={<Badge variant="planned">PLANNED / DEMO</Badge>}
-        >
-          <div className="space-y-5">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Tournaments</span>
-                <div className="text-xl font-bold text-slate-900 font-mono mt-1">
-                  {tournament?.tournamentsCount || 124}
-                </div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Avg. Candidates</span>
-                <div className="text-xl font-bold text-slate-900 font-mono mt-1">
-                  {tournament?.averageCandidates || 3}
-                </div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Avg. Judge Score</span>
-                <div className="text-xl font-bold text-purple-600 font-mono mt-1">
-                  {tournament?.averageJudgeScore || 0.87}
-                </div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                <span className="text-[11px] text-slate-500 font-medium uppercase">Best Response Rate</span>
-                <div className="text-xl font-bold text-emerald-600 font-mono mt-1">
-                  {tournament?.bestResponseRate || 82}%
-                </div>
-              </div>
-            </div>
-
-            {/* Conceptual Tournament Pipeline Diagram */}
-            <div className="p-5 rounded-lg border border-slate-200 bg-slate-50/60">
-              <div className="text-center text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
-                Tournament Execution Flow (Autonomous Gateway Selection)
-              </div>
-
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                {/* Step 1 */}
-                <div className="w-full md:w-1/4 p-3 bg-white rounded-md border border-slate-200 text-center shadow-2xs">
-                  <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Step 1</span>
-                  <h5 className="text-xs font-semibold text-slate-900 mt-1">Incoming Request</h5>
-                  <p className="text-[10px] text-slate-500 mt-0.5 font-mono">POST /v1/chat/completions</p>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0 hidden md:block" />
-
-                {/* Step 2 */}
-                <div className="w-full md:w-1/3 p-3 bg-white rounded-md border border-slate-200 space-y-1.5 shadow-2xs">
-                  <div className="text-center">
-                    <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Step 2: Candidates</span>
-                  </div>
-                  <div className="space-y-1 text-xs">
-                    <div className="px-2 py-1 rounded bg-slate-50 border border-slate-100 flex items-center justify-between">
-                      <span className="font-medium text-slate-700">Candidate A</span>
-                      <span className="text-[10px] text-slate-400 font-mono">Latency 1.1s</span>
-                    </div>
-                    <div className="px-2 py-1 rounded bg-emerald-50 border border-emerald-200 flex items-center justify-between">
-                      <span className="font-semibold text-emerald-800">Candidate B (Winner)</span>
-                      <span className="text-[10px] text-emerald-600 font-mono">Score 0.94</span>
-                    </div>
-                    <div className="px-2 py-1 rounded bg-slate-50 border border-slate-100 flex items-center justify-between">
-                      <span className="font-medium text-slate-700">Candidate C</span>
-                      <span className="text-[10px] text-slate-400 font-mono">Score 0.81</span>
-                    </div>
-                  </div>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0 hidden md:block" />
-
-                {/* Step 3 */}
-                <div className="w-full md:w-1/4 p-3 bg-white rounded-md border border-slate-200 text-center shadow-2xs">
-                  <span className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">Step 3: Judge</span>
-                  <h5 className="text-xs font-semibold text-slate-900 mt-1">LLM Evaluation Judge</h5>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Ranks reasoning & accuracy</p>
-                </div>
-
-                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0 hidden md:block" />
-
-                {/* Step 4 */}
-                <div className="w-full md:w-1/4 p-3 bg-emerald-50/80 rounded-md border border-emerald-200 text-center shadow-2xs">
-                  <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider">Step 4: Result</span>
-                  <h5 className="text-xs font-semibold text-emerald-900 mt-1">Selected Response</h5>
-                  <p className="text-[10px] text-emerald-700 mt-0.5 font-mono">Delivered to developer</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card title={<span className="flex items-center gap-2"><Minimize2 className="w-4 h-4 text-emerald-600" />Prompt Compression</span>} subtitle="Aggregated only when prompts are forwarded upstream">
+            <div className="grid grid-cols-2 gap-3 text-sm"><div>Original tokens<br/><strong className="text-xl">{compression?.originalTokens.toLocaleString()}</strong></div><div>Compressed tokens<br/><strong className="text-xl">{compression?.compressedTokens.toLocaleString()}</strong></div><div>Tokens saved<br/><strong className="text-xl text-emerald-600">{compression?.tokensSaved.toLocaleString()}</strong></div><div>Reduction<br/><strong className="text-xl text-accent-600">{compression?.compressionRatio}%</strong></div></div>
+          </Card>
+          <Card title={<span className="flex items-center gap-2"><Trophy className="w-4 h-4 text-clay-600" />Response Tournaments</span>} subtitle="Persisted judge outcomes">
+            <div className="grid grid-cols-2 gap-3 text-sm"><div>Tournaments<br/><strong className="text-xl">{tournament?.tournamentsCount}</strong></div><div>Average candidates<br/><strong className="text-xl">{tournament?.averageCandidates}</strong></div><div>Winning score<br/><strong className="text-xl text-clay-600">{tournament?.averageWinningScore}</strong></div><div>Judge fallback rate<br/><strong className="text-xl text-ochre-600">{tournament?.judgeFallbackRate}%</strong></div></div>
+          </Card>
+        </div>
+        <Card title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4" />Metric interpretation</span>} subtitle="Rate-based estimates"><p className="text-sm text-earth-600">USD values use your configured model rates and provider token counts when available. Local fake calls are unpriced. Tournament overhead includes extra candidate and judge calls, so net savings can be negative. These estimates may differ from provider invoices.</p></Card>
+      </>}
     </div>
-  );
+  </div>;
 };

@@ -20,7 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-150 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed select-none';
+  const baseStyles = 'gateway-button whitespace-nowrap inline-flex items-center justify-center font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed select-none';
 
   const sizeStyles = {
     sm: 'text-xs px-2.5 py-1.5 gap-1.5',
@@ -29,10 +29,10 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm focus:ring-blue-500 border border-blue-700/20 active:bg-blue-800',
-    secondary: 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-sm focus:ring-slate-400 active:bg-slate-100',
+    primary: 'bg-accent-600 hover:bg-accent-700 text-surface shadow-sm focus:ring-accent-500 border border-accent-700/20 active:bg-accent-800',
+    secondary: 'bg-surface hover:bg-earth-50 text-earth-700 border border-earth-300 shadow-sm focus:ring-earth-400 active:bg-earth-100',
     danger: 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 focus:ring-red-500 active:bg-red-200',
-    ghost: 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:ring-slate-300',
+    ghost: 'text-earth-600 hover:text-earth-900 hover:bg-earth-100 focus:ring-earth-300',
   };
 
   return (

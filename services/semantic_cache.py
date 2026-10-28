@@ -84,10 +84,8 @@ class PgVectorSemanticCache:
             "entries": [
                 {
                     "entry_id": entry.id,
-                    "api_key_id": entry.api_key_id,
                     "provider": entry.provider,
                     "model": entry.model,
-                    "response_preview": entry.response[:100],
                     "embedding_dimensions": len(entry.embedding),
                     "created_at": entry.created_at.isoformat(),
                 }

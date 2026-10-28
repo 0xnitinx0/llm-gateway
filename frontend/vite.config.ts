@@ -10,10 +10,10 @@ export default defineConfig({
       // Proxy all /api calls to the FastAPI backend running on localhost:8000
       // Example: /api/v1/chat/completions -> http://127.0.0.1:8000/v1/chat/completions
       // Example: /api/health -> http://127.0.0.1:8000/health
-      '/api': {
+      '^/api(?:/|$)': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.replace(/^\/api(?=\/|$)/, ''),
       },
     },
   },

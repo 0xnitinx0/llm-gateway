@@ -14,13 +14,13 @@ export const StatusDot: React.FC<StatusDotProps> = ({
   const dotStyles = {
     online: 'bg-emerald-500',
     offline: 'bg-rose-500',
-    checking: 'bg-amber-500',
+    checking: 'bg-ochre-500',
   };
 
   const textStyles = {
     online: 'text-emerald-700',
     offline: 'text-rose-700',
-    checking: 'text-amber-700',
+    checking: 'text-ochre-700',
   };
 
   const defaultLabels = {

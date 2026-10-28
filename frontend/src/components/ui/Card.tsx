@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { useEntrance } from './motion';
 
 interface CardProps {
   children: React.ReactNode;
@@ -17,24 +19,26 @@ export const Card: React.FC<CardProps> = ({
   headerAction,
   noPadding = false,
 }) => {
+  const entrance = useEntrance();
   return (
-    <div
-      className={`bg-white rounded-lg border border-slate-200/80 shadow-sm transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${className}`}
+    <motion.div
+      variants={entrance}
+      className={`gateway-card ${className}`}
     >
       {(title || headerAction) && (
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-4">
+        <div className="px-5 py-4 border-b border-earth-100 flex items-center justify-between gap-4">
           <div>
             {typeof title === 'string' ? (
-              <h3 className="text-sm font-semibold text-slate-900 tracking-tight">{title}</h3>
+              <h3 className="text-sm font-semibold text-earth-900 tracking-tight">{title}</h3>
             ) : (
               title
             )}
-            {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-earth-500 mt-0.5">{subtitle}</p>}
           </div>
           {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
       )}
       <div className={noPadding ? '' : 'p-5'}>{children}</div>
-    </div>
+    </motion.div>
   );
 };

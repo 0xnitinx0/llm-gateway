@@ -2,7 +2,9 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from decimal import Decimal
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.connection import Base
@@ -59,13 +61,24 @@ class RequestLog(Base):
     cache_hit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     similarity: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     llm_called: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    llm_call_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     streaming: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     rate_limited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     tournament: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    tournament_candidate_count: Mapped[int | None] = mapped_column(Integer)
+    tournament_winner_score: Mapped[float | None] = mapped_column(Float)
+    judge_fallback: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     original_tokens: Mapped[int | None] = mapped_column(Integer)
     compressed_tokens: Mapped[int | None] = mapped_column(Integer)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     total_tokens: Mapped[int | None] = mapped_column(Integer)
+    pricing_status: Mapped[str] = mapped_column(String(16), default="unpriced", nullable=False)
+    baseline_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    actual_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    net_savings_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    cache_savings_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    compression_savings_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    tournament_overhead_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
     error_code: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

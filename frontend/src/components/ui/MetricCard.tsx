@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { useEntrance } from './motion';
 import { Badge, BadgeVariant } from './Badge';
 
 interface MetricCardProps {
@@ -25,29 +27,31 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   trend,
   className = '',
 }) => {
+  const entrance = useEntrance();
   return (
-    <div
-      className={`bg-white rounded-lg border border-slate-200/80 p-5 shadow-sm transition-all hover:border-slate-300/80 ${className}`}
+    <motion.div
+      variants={entrance}
+      className={`metric-card ${className}`}
     >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-medium text-slate-500 tracking-wide uppercase">{label}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <span className="text-[10px] font-semibold text-earth-500 tracking-wide uppercase">{label}</span>
         <div className="flex items-center gap-1.5">
           {badgeVariant && (
             <Badge variant={badgeVariant} size="sm">
               {badgeText}
             </Badge>
           )}
-          {icon && <span className="text-slate-400">{icon}</span>}
+          {icon && <span className="text-earth-500">{icon}</span>}
         </div>
       </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight font-sans">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-2xl xl:text-3xl font-semibold tabular-nums text-earth-900 tracking-tight font-sans">
           {value}
         </span>
         {trend && (
           <span
             className={`text-xs font-semibold ${
-              trend.isPositive ? 'text-emerald-600' : 'text-slate-500'
+              trend.isPositive ? 'text-emerald-600' : 'text-earth-500'
             }`}
           >
             {trend.value}
@@ -55,8 +59,8 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         )}
       </div>
       {sublabel && (
-        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{sublabel}</p>
+        <p className="text-xs text-earth-500 mt-1.5 leading-relaxed">{sublabel}</p>
       )}
-    </div>
+    </motion.div>
   );
 };

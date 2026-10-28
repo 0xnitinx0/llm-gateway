@@ -31,3 +31,26 @@ def test_live_gateway_cache_and_rate_limit():
         for _ in range(4)
     ]
     assert statuses[-1] == 429
+
+
+@pytest.mark.skipif(os.getenv("RUN_INTEGRATION") != "1", reason="requires docker compose")
+def test_live_admin_portal_contracts():
+    base = os.getenv("GATEWAY_URL", "http://localhost:8000")
+    admin = {"X-Admin-Key": os.getenv("ADMIN_API_KEY", "admin-local-demo")}
+
+    assert httpx.get(f"{base}/usage").status_code == 401
+    config = httpx.get(f"{base}/v1/admin/config", headers=admin)
+    config.raise_for_status()
+    assert config.json()["embedding_dimensions"] == 384
+    assert "enabled_providers" in config.json()
+
+    usage = httpx.get(f"{base}/usage", headers=admin)
+    usage.raise_for_status()
+    body = usage.json()
+    assert body["cache_hits"] >= 0
+    assert body["cache_misses"] >= 0
+    assert len(body["history"]) == 7
+    assert "compression" in body
+    assert "tournaments" in body
+    assert "costs" in body
+    assert body["costs"]["currency"] == "USD"
